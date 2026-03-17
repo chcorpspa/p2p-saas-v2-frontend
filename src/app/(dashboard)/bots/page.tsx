@@ -92,7 +92,8 @@ function BotCard({
   loading: string | null;
 }) {
   const router = useRouter();
-  const isBuy = bot.tradeType === 'BUY';
+  const tradeType = bot.tradeType || (bot as any).config?.tradeType || 'SELL';
+  const isBuy = tradeType === 'BUY';
   const running = bot.status === 'RUNNING';
   const hasError = !!bot.lastError;
 
@@ -107,12 +108,12 @@ function BotCard({
       {/* Header */}
       <div className="px-4 pt-4 pb-3">
         <p className="font-bold text-base text-foreground leading-tight">
-          {bot.label || `${bot.asset}/${bot.fiat} ${bot.tradeType}`}
+          {bot.label || (bot as any).config?.label || `${bot.asset}/${bot.fiat} ${tradeType}`}
         </p>
         <div className="flex items-center gap-1.5 flex-wrap mt-2">
           {/* Trade type badge */}
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${isBuy ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-            {bot.tradeType || 'SELL'}
+            {tradeType}
           </span>
           {/* Mode badge */}
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/40">
