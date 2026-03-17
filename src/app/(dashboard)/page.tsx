@@ -232,6 +232,36 @@ export default function OverviewPage() {
         </p>
       </div>
 
+      {/* Plan info card */}
+      <div className="bg-card border border-border rounded-xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+              <DollarSign className="w-4 h-4 text-primary" />
+            </div>
+            <span className="font-bold text-foreground">Plan {(accounts?.[0] as any)?.tenant?.plan || 'PRO'}</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-4 text-center">
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Cuentas</p>
+            <p className="text-lg font-bold text-foreground">{activeAccounts}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Bots</p>
+            <p className="text-lg font-bold text-foreground">{totalBots}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Activos</p>
+            <p className="text-lg font-bold text-green-400">{runningBots}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Ganancia</p>
+            <p className={`text-lg font-bold ${netPositive ? 'text-green-400' : netNegative ? 'text-red-400' : 'text-foreground'}`}>{formatUsdt(totalNet)}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Stat Cards */}
       {isInitialLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

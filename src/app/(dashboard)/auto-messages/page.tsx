@@ -263,15 +263,32 @@ export default function AutoMessagesPage() {
             </div>
 
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">
-                Contenido * <span className="text-muted-foreground">(vars: {'{amount} {name} {orderNo} {price}'})</span>
-              </label>
+              <label className="text-xs text-muted-foreground block mb-1">Contenido *</label>
               <textarea
+                id="auto-msg-content"
                 value={form.content}
                 onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
                 className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm text-foreground h-24 focus:outline-none focus:border-primary resize-none"
-                placeholder="Hola {name}, hemos recibido tu pago..."
+                placeholder="Hola {nombre}, hemos recibido tu pago de {total} {fiat}..."
+                maxLength={500}
               />
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[10px] text-muted-foreground">{form.content.length}/500</span>
+              </div>
+              {/* Variable buttons */}
+              <div className="flex flex-wrap gap-1 mt-2">
+                {MESSAGE_VARIABLES.map(v => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, content: f.content + v.key }))}
+                    className="text-[10px] px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                    title={v.desc}
+                  >
+                    {v.key}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div>
