@@ -27,6 +27,13 @@ interface Bot {
   account: { id: string; label: string };
 }
 
+// advStatus from Binance: 1=Online, 3=Offline, 4=Closed
+const ADV_STATUS: Record<number, { label: string; color: string }> = {
+  1: { label: 'Publicado',  color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
+  3: { label: 'Offline',    color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
+  4: { label: 'Cerrado',    color: 'text-red-400 bg-red-500/10 border-red-500/30' },
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function relativeTime(date: string | null | undefined): string {
@@ -153,6 +160,24 @@ export default function AdsPage() {
     refetchInterval: 15000,
   });
 
+  // Fetch real Binance ad statuses (all accounts, merged)
+  const { data: adStatuses = {} } = useQuery<Record<string, number>>({
+    queryKey: ['ad-statuses'],
+    queryFn: async () => {
+      const accountIds = [...new Set(bots.map(b => b.account.id))];
+      const results = await Promise.all(
+        accountIds.map(id =>
+          api.get<Record<string, number>>(`/bots/accounts/${id}/ad-statuses`)
+            .then(r => r.data)
+            .catch(() => ({} as Record<string, number>))
+        )
+      );
+      return results.reduce((acc, r) => ({ ...acc, ...r }), {} as Record<string, number>);
+    },
+    enabled: bots.length > 0,
+    refetchInterval: 60000,
+  });
+
   // Real-time updates via WebSocket
   useEffect(() => {
     if (!socket) return;
@@ -266,7 +291,10 @@ export default function AdsPage() {
                   Cuenta
                 </th>
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                  Estado
+                  Bot
+                </th>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                  Binance
                 </th>
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground font-medium">
                   Modo
@@ -293,6 +321,15 @@ export default function AdsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={bot.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    {adStatuses[bot.advNo] != null ? (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${ADV_STATUS[adStatuses[bot.advNo]]?.color ?? 'text-muted-foreground'}`}>
+                        {ADV_STATUS[adStatuses[bot.advNo]]?.label ?? `Estado ${adStatuses[bot.advNo]}`}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <ModeBadge mode={bot.mode} />
