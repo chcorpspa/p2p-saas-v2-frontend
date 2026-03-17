@@ -360,7 +360,7 @@ export default function NotificationsPage() {
                     <Switch
                       id="notify-new-order"
                       checked={form.notifyNewOrder}
-                      onCheckedChange={(checked) =>
+                      onCheckedChange={(checked: boolean) =>
                         setForm((prev) => ({ ...prev, notifyNewOrder: checked }))
                       }
                     />
@@ -382,7 +382,7 @@ export default function NotificationsPage() {
                     <Switch
                       id="notify-buyer-paid"
                       checked={form.notifyBuyerPaid}
-                      onCheckedChange={(checked) =>
+                      onCheckedChange={(checked: boolean) =>
                         setForm((prev) => ({ ...prev, notifyBuyerPaid: checked }))
                       }
                     />
@@ -404,7 +404,7 @@ export default function NotificationsPage() {
                     <Switch
                       id="notify-completed"
                       checked={form.notifyCompleted}
-                      onCheckedChange={(checked) =>
+                      onCheckedChange={(checked: boolean) =>
                         setForm((prev) => ({ ...prev, notifyCompleted: checked }))
                       }
                     />
@@ -426,7 +426,7 @@ export default function NotificationsPage() {
                     <Switch
                       id="notify-cancelled"
                       checked={form.notifyCancelled}
-                      onCheckedChange={(checked) =>
+                      onCheckedChange={(checked: boolean) =>
                         setForm((prev) => ({ ...prev, notifyCancelled: checked }))
                       }
                     />
