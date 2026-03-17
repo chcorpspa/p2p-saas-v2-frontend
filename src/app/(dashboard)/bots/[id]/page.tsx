@@ -6,6 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
 import { toast } from 'sonner';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Bot {
   id: string;
@@ -19,10 +20,48 @@ interface Bot {
   currentPrice?: number | null;
 }
 
-interface PriceTick { price: number; createdAt: string; }
+interface PriceTick { price: number; createdAt: string; action?: string; }
 
-const MODES = ['POSITION', 'PRICE', 'SMART', 'FLOAT'];
-const RISK_PROFILES = ['AGGRESSIVE', 'MODERATE', 'CONSERVATIVE'];
+const MODES = [
+  { value: 'POSITION', label: 'Posición', desc: 'Compite por una posición específica en el mercado' },
+  { value: 'PRICE',    label: 'Precio fijo', desc: 'Mantiene un precio fijo definido' },
+  { value: 'DYNAMIC',  label: 'Dinámico', desc: 'Ajuste automático con spread sobre el mejor precio' },
+  { value: 'SMART',    label: 'Smart', desc: 'Balanceo inteligente entre posición y precio' },
+  { value: 'FLOAT',    label: 'Flotante', desc: 'Sigue el mercado con spread configurable' },
+];
+
+const RISK_PROFILES = [
+  { value: 'AGGRESSIVE',   label: 'Agresivo',   desc: 'Undercut más agresivo, mayor volumen' },
+  { value: 'MODERATE',     label: 'Moderado',   desc: 'Balance entre precio y volumen' },
+  { value: 'CONSERVATIVE', label: 'Conservador', desc: 'Prioriza margen sobre volumen' },
+];
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-sm text-muted-foreground block mb-1">{label}</label>
+      {children}
+      {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function NumberInput({
+  value, onChange, placeholder, step = '0.01', min, max,
+}: { value: string; onChange: (v: string) => void; placeholder?: string; step?: string; min?: string; max?: string }) {
+  return (
+    <input
+      type="number"
+      step={step}
+      min={min}
+      max={max}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+    />
+  );
+}
 
 function PriceChart({ ticks }: { ticks: PriceTick[] }) {
   if (ticks.length < 2) return <p className="text-sm text-muted-foreground">Sin datos de precio</p>;
@@ -78,34 +117,79 @@ export default function BotConfigPage() {
     refetchInterval: 30000,
   });
 
-  const [mode, setMode] = useState('');
-  const [riskProfile, setRiskProfile] = useState('');
-  const [configJson, setConfigJson] = useState('');
+  // Core settings
+  const [mode, setMode] = useState('POSITION');
+  const [riskProfile, setRiskProfile] = useState('MODERATE');
+
+  // Mode-specific fields (all as strings for input binding)
+  const [targetPosition, setTargetPosition] = useState('1');
+  const [fixedPrice, setFixedPrice] = useState('');
+  const [spreadVes, setSpreadVes] = useState('0.01');
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [intervalSec, setIntervalSec] = useState('8');
+
+  // Advanced JSON fallback
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [configJson, setConfigJson] = useState('{}');
   const [jsonError, setJsonError] = useState('');
+
+  // Manual price
   const [manualPrice, setManualPrice] = useState('');
 
-  // Initialize form from bot data
+  // Sync form from bot data on load
   useEffect(() => {
-    if (bot) {
-      setMode(bot.mode);
-      setRiskProfile(bot.riskProfile);
-      setConfigJson(bot.config ? JSON.stringify(bot.config, null, 2) : '{}');
-    }
+    if (!bot) return;
+    setMode(bot.mode ?? 'POSITION');
+    setRiskProfile(bot.riskProfile ?? 'MODERATE');
+    const c = (bot.config ?? {}) as Record<string, unknown>;
+    if (c.targetPosition != null)  setTargetPosition(String(c.targetPosition));
+    if (c.fixedPrice != null)      setFixedPrice(String(c.fixedPrice));
+    if (c.spreadVes != null)       setSpreadVes(String(c.spreadVes));
+    if (c.minPrice != null)        setMinPrice(String(c.minPrice));
+    if (c.maxPrice != null)        setMaxPrice(String(c.maxPrice));
+    if (c.intervalMs != null)      setIntervalSec(String(Math.round(Number(c.intervalMs) / 1000)));
+    else if (c.intervalSec != null) setIntervalSec(String(c.intervalSec));
+    setConfigJson(JSON.stringify(c, null, 2));
   }, [bot]);
+
+  // Build config object from guided fields
+  function buildConfig(): Record<string, unknown> {
+    const cfg: Record<string, unknown> = {};
+    const pos = parseInt(targetPosition);
+    const sprd = parseFloat(spreadVes);
+    const fp = parseFloat(fixedPrice);
+    const mn = parseFloat(minPrice);
+    const mx = parseFloat(maxPrice);
+    const iv = parseInt(intervalSec);
+
+    if (mode === 'POSITION' || mode === 'SMART') {
+      if (!isNaN(pos)) cfg.targetPosition = pos;
+    }
+    if (mode === 'PRICE') {
+      if (!isNaN(fp)) cfg.fixedPrice = fp;
+    }
+    if (mode !== 'PRICE') {
+      if (!isNaN(sprd)) cfg.spreadVes = sprd;
+    }
+    if (!isNaN(mn) && minPrice !== '') cfg.minPrice = mn;
+    if (!isNaN(mx) && maxPrice !== '') cfg.maxPrice = mx;
+    if (!isNaN(iv) && iv > 0) cfg.intervalMs = iv * 1000;
+    return cfg;
+  }
 
   const saveConfig = useMutation({
     mutationFn: () => {
-      let config: Record<string, unknown>;
-      try {
-        config = JSON.parse(configJson);
-      } catch {
-        throw new Error('JSON inválido');
-      }
+      const config = showAdvanced ? (() => {
+        try { return JSON.parse(configJson); }
+        catch { throw new Error('JSON inválido'); }
+      })() : buildConfig();
       return api.put(`/bots/${botId}`, { mode, riskProfile, config });
     },
     onSuccess: () => {
       toast.success('Configuración guardada');
       qc.invalidateQueries({ queryKey: ['bots', botId] });
+      qc.invalidateQueries({ queryKey: ['bots'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -136,22 +220,28 @@ export default function BotConfigPage() {
 
   const validateJson = (value: string) => {
     setConfigJson(value);
-    try {
-      JSON.parse(value);
-      setJsonError('');
-    } catch {
-      setJsonError('JSON inválido');
-    }
+    try { JSON.parse(value); setJsonError(''); }
+    catch { setJsonError('JSON inválido'); }
   };
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Cargando...</div>;
   if (error || !bot) return <div className="p-6 text-red-400">Bot no encontrado</div>;
 
   const isRunning = bot.status === 'RUNNING';
+  const currentPrice = history.length > 0
+    ? Number(history[history.length - 1].price)
+    : (bot.currentPrice ?? null);
+
+  const statusColor = {
+    RUNNING: 'text-green-400',
+    STOPPED: 'text-muted-foreground',
+    ERROR:   'text-red-400',
+    PAUSED:  'text-yellow-400',
+  }[bot.status] ?? 'text-muted-foreground';
 
   return (
     <div className="p-6 max-w-2xl">
-      {/* Back button */}
+      {/* Header */}
       <button
         onClick={() => router.push('/bots')}
         className="text-sm text-muted-foreground hover:text-foreground mb-6 flex items-center gap-1"
@@ -159,9 +249,22 @@ export default function BotConfigPage() {
         ← Volver a Bots
       </button>
 
-      <h1 className="text-xl font-semibold mb-1">Config Bot</h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-xl font-semibold">Config Bot</h1>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+          isRunning ? 'border-green-500/40 bg-green-500/10 text-green-400'
+          : bot.status === 'ERROR' ? 'border-red-500/40 bg-red-500/10 text-red-400'
+          : 'border-border bg-secondary text-muted-foreground'
+        }`}>
+          {bot.status}
+        </span>
+      </div>
       <p className="text-sm text-muted-foreground mb-6">
-        advNo: {bot.advNo} · Cuenta: {bot.account.label}
+        advNo: <span className="font-mono text-foreground">{bot.advNo}</span> · Cuenta:{' '}
+        <span className="text-foreground">{bot.account.label}</span>
+        {currentPrice !== null && (
+          <> · Precio: <span className="font-mono text-primary">{currentPrice.toLocaleString('es-VE', { minimumFractionDigits: 2 })} VES</span></>
+        )}
       </p>
 
       {bot.lastError && (
@@ -170,73 +273,161 @@ export default function BotConfigPage() {
         </div>
       )}
 
-      {/* Form */}
-      <div className="space-y-4 bg-card border border-border rounded-lg p-5 mb-6">
-        <div>
-          <label className="text-sm text-muted-foreground block mb-1">Modo</label>
-          <select
-            value={mode}
-            onChange={e => setMode(e.target.value)}
-            className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm text-foreground"
+      {/* === Config form === */}
+      <div className="space-y-5 bg-card border border-border rounded-lg p-5 mb-6">
+        <h2 className="font-medium">Motor de precio</h2>
+
+        {/* Mode selector */}
+        <Field label="Modo de precio">
+          <div className="grid grid-cols-1 gap-2">
+            {MODES.map(m => (
+              <button
+                key={m.value}
+                onClick={() => setMode(m.value)}
+                className={`flex items-start gap-3 px-3 py-2.5 rounded border text-left transition-colors ${
+                  mode === m.value
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border bg-secondary text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                }`}
+              >
+                <span className={`mt-0.5 text-xs font-bold rounded px-1.5 py-0.5 shrink-0 ${
+                  mode === m.value ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+                }`}>{m.value}</span>
+                <div>
+                  <span className="text-sm font-medium">{m.label}</span>
+                  <p className="text-xs text-muted-foreground">{m.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        {/* Risk profile */}
+        <Field label="Perfil de riesgo">
+          <div className="flex gap-2">
+            {RISK_PROFILES.map(r => (
+              <button
+                key={r.value}
+                onClick={() => setRiskProfile(r.value)}
+                title={r.desc}
+                className={`flex-1 px-3 py-2 rounded border text-sm transition-colors ${
+                  riskProfile === r.value
+                    ? 'border-primary bg-primary/10 text-foreground font-medium'
+                    : 'border-border bg-secondary text-muted-foreground hover:border-primary/40'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <div className="border-t border-border pt-4 space-y-4">
+          {/* POSITION mode: target position */}
+          {(mode === 'POSITION' || mode === 'SMART') && (
+            <Field
+              label="Posición objetivo"
+              hint="1 = el precio más bajo del mercado (más competitivo). 2 = segundo más bajo, etc."
+            >
+              <NumberInput
+                value={targetPosition}
+                onChange={setTargetPosition}
+                placeholder="1"
+                step="1"
+                min="1"
+                max="20"
+              />
+            </Field>
+          )}
+
+          {/* PRICE/fixed mode: fixed price */}
+          {mode === 'PRICE' && (
+            <Field
+              label="Precio fijo (VES)"
+              hint="El bot mantendrá exactamente este precio en el anuncio."
+            >
+              <NumberInput value={fixedPrice} onChange={setFixedPrice} placeholder="649.00" />
+            </Field>
+          )}
+
+          {/* Spread — all modes except PRICE */}
+          {mode !== 'PRICE' && (
+            <Field
+              label="Spread (VES)"
+              hint="Cuánto por debajo del competidor de referencia se pone el precio (default: 0.01)."
+            >
+              <NumberInput value={spreadVes} onChange={setSpreadVes} placeholder="0.01" />
+            </Field>
+          )}
+
+          {/* Price floor and ceiling */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Precio mínimo (VES)" hint="Límite de seguridad inferior. Vacío = sin límite.">
+              <NumberInput value={minPrice} onChange={setMinPrice} placeholder="600.00" />
+            </Field>
+            <Field label="Precio máximo (VES)" hint="Límite de seguridad superior. Vacío = sin límite.">
+              <NumberInput value={maxPrice} onChange={setMaxPrice} placeholder="700.00" />
+            </Field>
+          </div>
+
+          {/* Interval */}
+          <Field label="Intervalo de tick (segundos)" hint="Cada cuántos segundos el bot actualiza el precio (mínimo 5s).">
+            <NumberInput value={intervalSec} onChange={setIntervalSec} placeholder="8" step="1" min="5" />
+          </Field>
+        </div>
+
+        {/* Advanced JSON toggle */}
+        <div className="border-t border-border pt-4">
+          <button
+            onClick={() => {
+              if (!showAdvanced) setConfigJson(JSON.stringify(buildConfig(), null, 2));
+              setShowAdvanced(v => !v);
+            }}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            {MODES.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+            {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            JSON avanzado
+          </button>
+          {showAdvanced && (
+            <div className="mt-3">
+              <textarea
+                value={configJson}
+                onChange={e => validateJson(e.target.value)}
+                className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm font-mono text-foreground h-40 focus:outline-none focus:border-primary resize-none"
+                placeholder="{}"
+              />
+              {jsonError && <p className="text-xs text-red-400 mt-1">{jsonError}</p>}
+            </div>
+          )}
         </div>
 
-        <div>
-          <label className="text-sm text-muted-foreground block mb-1">Perfil de riesgo</label>
-          <select
-            value={riskProfile}
-            onChange={e => setRiskProfile(e.target.value)}
-            className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm text-foreground"
-          >
-            {RISK_PROFILES.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label className="text-sm text-muted-foreground block mb-1">
-            Configuración avanzada (JSON)
-          </label>
-          <textarea
-            value={configJson}
-            onChange={e => validateJson(e.target.value)}
-            className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm font-mono text-foreground h-32 focus:outline-none focus:border-primary resize-none"
-            placeholder="{}"
-          />
-          {jsonError && <p className="text-xs text-red-400 mt-1">{jsonError}</p>}
-        </div>
-
+        {/* Actions */}
         <div className="flex gap-3 pt-2">
           <Button
             onClick={() => saveConfig.mutate()}
-            disabled={saveConfig.isPending || !!jsonError}
+            disabled={saveConfig.isPending || (showAdvanced && !!jsonError)}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
-            {saveConfig.isPending ? 'Guardando...' : 'Guardar Config'}
+            {saveConfig.isPending ? 'Guardando...' : 'Guardar configuración'}
           </Button>
           <Button
             onClick={() => toggleBot.mutate()}
             disabled={toggleBot.isPending}
             variant={isRunning ? 'destructive' : 'secondary'}
           >
-            {toggleBot.isPending ? 'Procesando...' : isRunning ? '■ Stop' : '▶ Start'}
+            {toggleBot.isPending ? 'Procesando...' : isRunning ? '■ Detener' : '▶ Iniciar'}
           </Button>
         </div>
       </div>
 
-      {/* Manual price update */}
+      {/* Manual price override */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3 mb-6">
-        <h3 className="font-semibold">Precio manual</h3>
-        <p className="text-sm text-muted-foreground">
-          Precio actual:{' '}
-          <span className="text-foreground font-mono">
-            {history.length > 0
-              ? Number(history[history.length - 1].price).toLocaleString('es-VE', { minimumFractionDigits: 2 })
-              : '—'}{' '}
-            VES
-          </span>
-        </p>
+        <div>
+          <h3 className="font-semibold">Precio manual</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Aplica un precio puntual al anuncio ahora mismo. No cambia el modo del bot.
+          </p>
+        </div>
         <div className="flex gap-2">
           <input
             type="number"
