@@ -176,6 +176,11 @@ export default function OrdersPage() {
       api.post(`/orders/${selectedOrder!.orderNo}/release`, { accountId }).then(r => r.data),
     onSuccess: () => {
       toast.success('Cripto liberado');
+      const released = selectedOrder!.orderNo;
+      setSelectedOrder(null);
+      qc.setQueryData<ActiveOrder[]>(['orders', 'active', accountId], (prev = []) =>
+        prev.filter(o => o.orderNo !== released)
+      );
       qc.invalidateQueries({ queryKey: ['orders', 'active', accountId] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -187,6 +192,11 @@ export default function OrdersPage() {
     onSuccess: () => {
       toast.success('Orden cancelada');
       setShowCancel(false);
+      const cancelled = selectedOrder!.orderNo;
+      setSelectedOrder(null);
+      qc.setQueryData<ActiveOrder[]>(['orders', 'active', accountId], (prev = []) =>
+        prev.filter(o => o.orderNo !== cancelled)
+      );
       qc.invalidateQueries({ queryKey: ['orders', 'active', accountId] });
     },
     onError: (e: Error) => toast.error(e.message),

@@ -134,6 +134,9 @@ export default function BotConfigPage() {
   const [configJson, setConfigJson] = useState('{}');
   const [jsonError, setJsonError] = useState('');
 
+  // Restart on save
+  const [restartOnSave, setRestartOnSave] = useState(false);
+
   // Manual price
   const [manualPrice, setManualPrice] = useState('');
 
@@ -186,10 +189,22 @@ export default function BotConfigPage() {
       })() : buildConfig();
       return api.put(`/bots/${botId}`, { mode, riskProfile, config });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('Configuración guardada');
       qc.invalidateQueries({ queryKey: ['bots', botId] });
       qc.invalidateQueries({ queryKey: ['bots'] });
+
+      if (restartOnSave && bot?.status === 'RUNNING') {
+        try {
+          await api.post(`/bots/${botId}/stop`);
+          await api.post(`/bots/${botId}/start`);
+          toast.success('Bot reiniciado con nueva configuración');
+          qc.invalidateQueries({ queryKey: ['bots', botId] });
+          qc.invalidateQueries({ queryKey: ['bots'] });
+        } catch {
+          toast.error('Config guardada pero no se pudo reiniciar el bot');
+        }
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -402,21 +417,36 @@ export default function BotConfigPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 pt-2">
-          <Button
-            onClick={() => saveConfig.mutate()}
-            disabled={saveConfig.isPending || (showAdvanced && !!jsonError)}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            {saveConfig.isPending ? 'Guardando...' : 'Guardar configuración'}
-          </Button>
-          <Button
-            onClick={() => toggleBot.mutate()}
-            disabled={toggleBot.isPending}
-            variant={isRunning ? 'destructive' : 'secondary'}
-          >
-            {toggleBot.isPending ? 'Procesando...' : isRunning ? '■ Detener' : '▶ Iniciar'}
-          </Button>
+        <div className="space-y-3 pt-2">
+          {isRunning && (
+            <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+              <input
+                type="checkbox"
+                checked={restartOnSave}
+                onChange={e => setRestartOnSave(e.target.checked)}
+                className="w-4 h-4 rounded accent-primary"
+              />
+              <span className="text-sm text-muted-foreground">
+                Reiniciar bot al guardar
+              </span>
+            </label>
+          )}
+          <div className="flex gap-3">
+            <Button
+              onClick={() => saveConfig.mutate()}
+              disabled={saveConfig.isPending || (showAdvanced && !!jsonError)}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {saveConfig.isPending ? (restartOnSave && isRunning ? 'Guardando y reiniciando...' : 'Guardando...') : 'Guardar configuración'}
+            </Button>
+            <Button
+              onClick={() => toggleBot.mutate()}
+              disabled={toggleBot.isPending || saveConfig.isPending}
+              variant={isRunning ? 'destructive' : 'secondary'}
+            >
+              {toggleBot.isPending ? 'Procesando...' : isRunning ? '■ Detener' : '▶ Iniciar'}
+            </Button>
+          </div>
         </div>
       </div>
 
