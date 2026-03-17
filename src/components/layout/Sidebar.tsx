@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   Bot, BarChart2, MessageSquare, List, Users,
-  ShieldCheck, Bell, LogOut, TrendingUp, Key, BellRing,
+  ShieldCheck, Bell, LogOut, TrendingUp, Key, BellRing, Megaphone,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -12,6 +12,7 @@ const links = [
   { href: '/', label: 'Overview', icon: BarChart2 },
   { href: '/bots', label: 'Bots', icon: Bot },
   { href: '/orders', label: 'Órdenes', icon: List },
+  { href: '/ads', label: 'Anuncios', icon: Megaphone },
   { href: '/pnl', label: 'P&L', icon: TrendingUp },
   { href: '/accounts', label: 'Cuentas', icon: Key },
   { href: '/operators', label: 'Operadores', icon: Users },
