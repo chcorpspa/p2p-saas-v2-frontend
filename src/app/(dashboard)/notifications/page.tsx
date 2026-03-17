@@ -173,8 +173,20 @@ export default function NotificationsPage() {
     saveMutation.mutate(form);
   };
 
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      await api.post(`/notifications/accounts/${selectedAccountId}/test`);
+    },
+    onSuccess: () => toast.success('Mensaje de prueba enviado a Telegram'),
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Error al enviar mensaje de prueba';
+      toast.error(msg);
+    },
+  });
+
   const handleTest = () => {
-    toast.info('Funcionalidad próximamente');
+    if (selectedAccountId === null) return;
+    testMutation.mutate();
   };
 
   const isFormLoading = loadingConfig || fetchingConfig;
@@ -412,10 +424,10 @@ export default function NotificationsPage() {
                   variant="outline"
                   onClick={handleTest}
                   className="sm:w-auto w-full gap-2"
-                  disabled={saveMutation.isPending}
+                  disabled={saveMutation.isPending || testMutation.isPending}
                 >
                   <Send className="h-4 w-4" />
-                  Enviar mensaje de prueba
+                  {testMutation.isPending ? 'Enviando...' : 'Enviar mensaje de prueba'}
                 </Button>
 
                 <Button
