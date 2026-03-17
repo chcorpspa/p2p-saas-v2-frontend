@@ -44,7 +44,14 @@ interface ChatMessage {
   imageUrl?: string;
   createdAt: string;
 }
-type CancelReason = 'buyer_requests' | 'payment_not_confirmed' | 'duplicate_order';
+type CancelReason = 'seller_extra_fee' | 'seller_payment_issue' | 'seller_network_issue' | 'seller_no_response' | 'seller_frozen_account';
+const CANCEL_REASONS: { value: CancelReason; label: string }[] = [
+  { value: 'seller_extra_fee', label: 'Comisión extra' },
+  { value: 'seller_payment_issue', label: 'Problema con el pago' },
+  { value: 'seller_network_issue', label: 'Problema de red' },
+  { value: 'seller_no_response', label: 'Sin respuesta del comprador' },
+  { value: 'seller_frozen_account', label: 'Cuenta congelada' },
+];
 
 const STATUS_LABELS: Record<number, string> = {
   1: 'Pendiente', 2: 'Pagado', 3: 'Completado', 4: 'Cancelado', 5: 'Reclamado',
@@ -85,7 +92,7 @@ export default function OrdersPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [msgInput, setMsgInput] = useState('');
   const [showCancel, setShowCancel] = useState(false);
-  const [cancelReason, setCancelReason] = useState<CancelReason>('buyer_requests');
+  const [cancelReason, setCancelReason] = useState<CancelReason>('seller_payment_issue');
   const [showAppeal, setShowAppeal] = useState(false);
   const [appealType, setAppealType] = useState(1);
   const [appealReason, setAppealReason] = useState('');
@@ -269,20 +276,31 @@ export default function OrdersPage() {
   return (
     <div className="flex flex-col h-full">
 
-      {/* ── Tab switcher ──────────────────────────────────────────── */}
-      <div className="flex gap-2 p-4 border-b border-border shrink-0">
-        <button
-          onClick={() => setTab('active')}
-          className={`px-4 py-1.5 text-sm rounded ${tab === 'active' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+      {/* ── Top toolbar ──────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border shrink-0 flex-wrap">
+        <select
+          value={accountId}
+          onChange={e => { setAccountId(e.target.value); localStorage.setItem('selectedAccountId', e.target.value); setSelectedOrder(null); }}
+          className="min-w-[180px] text-sm bg-white/6 border border-white/10 rounded-lg px-3 py-1.5 text-foreground focus:outline-none focus:border-primary/60"
         >
-          Activas
-        </button>
-        <button
-          onClick={() => setTab('history')}
-          className={`px-4 py-1.5 text-sm rounded ${tab === 'history' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-        >
-          Historial
-        </button>
+          <option value="">Selecciona cuenta...</option>
+          {accounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+        </select>
+
+        <div className="flex gap-1 ml-auto">
+          <button
+            onClick={() => setTab('active')}
+            className={`px-3 py-1 text-xs rounded-lg border transition-colors ${tab === 'active' ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
+          >
+            En Proceso
+          </button>
+          <button
+            onClick={() => setTab('history')}
+            className={`px-3 py-1 text-xs rounded-lg border transition-colors ${tab === 'history' ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
+          >
+            Procesadas
+          </button>
+        </div>
       </div>
 
       {tab === 'active' ? (
@@ -291,15 +309,6 @@ export default function OrdersPage() {
 
           {/* Left: Order List */}
           <div className="w-1/3 border-r border-border flex flex-col">
-            <div className="p-4 border-b border-border">
-              <select
-                value={accountId}
-                onChange={e => { setAccountId(e.target.value); localStorage.setItem('selectedAccountId', e.target.value); setSelectedOrder(null); }}
-                className="w-full text-sm bg-secondary border border-border rounded px-2 py-1.5 text-foreground"
-              >
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-              </select>
-            </div>
             <div className="flex-1 overflow-y-auto">
               {activeOrders.length === 0 && (
                 <div className="p-6 text-center text-muted-foreground text-sm">Sin órdenes activas</div>
@@ -502,20 +511,16 @@ export default function OrdersPage() {
                 {showCancel && (
                   <div className="border border-border rounded-lg p-4 space-y-3 bg-card">
                     <p className="text-sm font-medium">Motivo de cancelación</p>
-                    {(['buyer_requests', 'payment_not_confirmed', 'duplicate_order'] as CancelReason[]).map(r => (
-                      <label key={r} className="flex items-center gap-2 text-sm cursor-pointer">
+                    {CANCEL_REASONS.map(r => (
+                      <label key={r.value} className="flex items-center gap-2 text-sm cursor-pointer">
                         <input
                           type="radio"
                           name="reason"
-                          value={r}
-                          checked={cancelReason === r}
-                          onChange={() => setCancelReason(r)}
+                          value={r.value}
+                          checked={cancelReason === r.value}
+                          onChange={() => setCancelReason(r.value)}
                         />
-                        <span>
-                          {r === 'buyer_requests' ? 'Comprador solicita' :
-                           r === 'payment_not_confirmed' ? 'Pago no confirmado' :
-                           'Orden duplicada'}
-                        </span>
+                        <span>{r.label}</span>
                       </label>
                     ))}
                     <div className="flex gap-2 pt-1">

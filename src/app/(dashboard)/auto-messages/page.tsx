@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 
-type Trigger = 'ORDER_CREATED' | 'BUYER_PAID' | 'ORDER_COMPLETED' | 'ORDER_CANCELLED';
+type Trigger = 'ORDER_CREATED' | 'BUYER_PAID' | 'SELLER_PAID' | 'ORDER_COMPLETED' | 'ORDER_CANCELLED' | 'KYC_REQUESTED' | 'KYC_BUY' | 'KYC_SELL' | 'APPEAL';
 
 interface Account { id: string; label: string; }
 interface AutoMessage {
@@ -20,13 +20,30 @@ interface AutoMessage {
   account: { id: string; label: string };
 }
 
-const TRIGGERS: Trigger[] = ['ORDER_CREATED', 'BUYER_PAID', 'ORDER_COMPLETED', 'ORDER_CANCELLED'];
+const TRIGGERS: Trigger[] = ['ORDER_CREATED', 'BUYER_PAID', 'SELLER_PAID', 'ORDER_COMPLETED', 'ORDER_CANCELLED', 'KYC_REQUESTED', 'KYC_BUY', 'KYC_SELL', 'APPEAL'];
 const TRIGGER_LABELS: Record<Trigger, string> = {
   ORDER_CREATED: 'Orden creada',
   BUYER_PAID: 'Comprador pagó',
+  SELLER_PAID: 'Vendedor pagó',
   ORDER_COMPLETED: 'Completada',
   ORDER_CANCELLED: 'Cancelada',
+  KYC_REQUESTED: 'KYC requerido',
+  KYC_BUY: 'KYC compra',
+  KYC_SELL: 'KYC venta',
+  APPEAL: 'Apelación',
 };
+
+const MESSAGE_VARIABLES = [
+  { key: '{nombre}', desc: 'Nombre del cliente' },
+  { key: '{nickname}', desc: 'Nickname Binance' },
+  { key: '{cantidad}', desc: 'Cantidad USDT' },
+  { key: '{precio}', desc: 'Precio unitario' },
+  { key: '{total}', desc: 'Total fiat' },
+  { key: '{asset}', desc: 'Activo (USDT)' },
+  { key: '{fiat}', desc: 'Moneda fiat' },
+  { key: '{metodo}', desc: 'Método de pago' },
+  { key: '{orden}', desc: 'Número de orden' },
+];
 
 const DEFAULT_FORM = {
   accountId: '',

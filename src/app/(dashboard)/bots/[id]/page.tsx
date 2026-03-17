@@ -6,15 +6,21 @@ import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, RefreshCw, ArrowLeft } from 'lucide-react';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Bot {
   id: string;
   advNo: string;
+  asset: string;
+  fiat: string;
   status: 'RUNNING' | 'STOPPED' | 'ERROR' | 'PAUSED';
   mode: string;
   riskProfile: string;
-  config: Record<string, unknown> | null;
+  tradeType?: string;
+  label?: string;
+  config: Record<string, any> | null;
   lastError?: string;
   account: { id: string; label: string };
   currentPrice?: number | null;
@@ -22,75 +28,39 @@ interface Bot {
 
 interface PriceTick { price: number; createdAt: string; action?: string; }
 
-const MODES = [
-  { value: 'POSITION', label: 'Posición', desc: 'Compite por una posición específica en el mercado' },
-  { value: 'PRICE',    label: 'Precio fijo', desc: 'Mantiene un precio fijo definido' },
-  { value: 'DYNAMIC',  label: 'Dinámico', desc: 'Ajuste automático con spread sobre el mejor precio' },
-  { value: 'SMART',    label: 'Smart', desc: 'Balanceo inteligente entre posición y precio' },
-  { value: 'FLOAT',    label: 'Flotante', desc: 'Sigue el mercado con spread configurable' },
-];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const RISK_PROFILES = [
-  { value: 'AGGRESSIVE',   label: 'Agresivo',   desc: 'Undercut más agresivo, mayor volumen' },
-  { value: 'MODERATE',     label: 'Moderado',   desc: 'Balance entre precio y volumen' },
-  { value: 'CONSERVATIVE', label: 'Conservador', desc: 'Prioriza margen sobre volumen' },
-];
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function ConfigCard({ title, children, extra }: { title: string; children: React.ReactNode; extra?: React.ReactNode }) {
   return (
-    <div>
-      <label className="text-sm text-muted-foreground block mb-1">{label}</label>
+    <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-sm">{title}</h3>
+        {extra}
+      </div>
       {children}
-      {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
     </div>
   );
 }
 
-function NumberInput({
-  value, onChange, placeholder, step = '0.01', min, max,
-}: { value: string; onChange: (v: string) => void; placeholder?: string; step?: string; min?: string; max?: string }) {
-  return (
-    <input
-      type="number"
-      step={step}
-      min={min}
-      max={max}
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-    />
-  );
-}
+const inputClass = 'w-full bg-white/6 border border-white/10 rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15 transition-all font-mono';
+const labelClass = 'text-xs text-muted-foreground font-medium mb-1.5 block';
+
+// ─── Price Chart ──────────────────────────────────────────────────────────────
 
 function PriceChart({ ticks }: { ticks: PriceTick[] }) {
   if (ticks.length < 2) return <p className="text-sm text-muted-foreground">Sin datos de precio</p>;
-
   const prices = ticks.map(t => t.price);
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const range = max - min || 1;
+  const min = Math.min(...prices), max = Math.max(...prices), range = max - min || 1;
   const W = 600, H = 120;
-
-  const points = prices.map((p, i) =>
-    `${(i / (prices.length - 1)) * W},${H - ((p - min) / range) * (H - 8) - 4}`
-  ).join(' ');
-
-  const first = ticks[0]?.createdAt
-    ? new Date(ticks[0].createdAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
-    : '';
-  const last = ticks[ticks.length - 1]?.createdAt
-    ? new Date(ticks[ticks.length - 1].createdAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
-    : '';
-
+  const points = prices.map((p, i) => `${(i / (prices.length - 1)) * W},${H - ((p - min) / range) * (H - 8) - 4}`).join(' ');
   return (
     <div className="w-full overflow-x-auto">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-32" preserveAspectRatio="none">
-        <polyline fill="none" stroke="oklch(0.82 0.165 86)" strokeWidth="2" points={points} />
+        <polyline fill="none" stroke="oklch(0.58 0.28 280)" strokeWidth="2" points={points} />
       </svg>
       <div className="flex justify-between text-xs text-muted-foreground mt-1">
-        <span>{first}</span>
-        <span>{last}</span>
+        <span>{ticks[0]?.createdAt ? new Date(ticks[0].createdAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+        <span>{ticks.at(-1)?.createdAt ? new Date(ticks.at(-1)!.createdAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
       </div>
       <div className="flex justify-between text-xs text-muted-foreground">
         <span>{min.toLocaleString('es-VE', { minimumFractionDigits: 2 })} VES</span>
@@ -99,6 +69,8 @@ function PriceChart({ ticks }: { ticks: PriceTick[] }) {
     </div>
   );
 }
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function BotConfigPage() {
   const router = useRouter();
@@ -110,380 +82,458 @@ export default function BotConfigPage() {
     queryKey: ['bots', botId],
     queryFn: () => api.get(`/bots/${botId}`).then(r => r.data),
   });
-
   const { data: history = [] } = useQuery<PriceTick[]>({
-    queryKey: ['bots', botId, 'price-history', 100],
+    queryKey: ['bots', botId, 'price-history'],
     queryFn: () => api.get(`/bots/${botId}/price-history?limit=100`).then(r => r.data),
     refetchInterval: 30000,
   });
 
-  // Core settings
-  const [mode, setMode] = useState('POSITION');
-  const [riskProfile, setRiskProfile] = useState('MODERATE');
+  // ── Form state ────────────────────────────────────────────────────────────
+  const [label, setLabel] = useState('');
+  const [mode, setMode] = useState('smart');
+  const [riskProfile, setRiskProfile] = useState('moderate');
 
-  // Mode-specific fields (all as strings for input binding)
-  const [targetPosition, setTargetPosition] = useState('1');
-  const [fixedPrice, setFixedPrice] = useState('');
-  const [spreadVes, setSpreadVes] = useState('0.01');
-  const [minPrice, setMinPrice] = useState('');
-  const [maxPrice, setMaxPrice] = useState('');
-  const [intervalSec, setIntervalSec] = useState('8');
+  // Smart
+  const [targetPos, setTargetPos] = useState('1');
+  const [increment, setIncrement] = useState('0.02');
+  const [gapTol, setGapTol] = useState('0.01');
 
-  // Advanced JSON fallback
+  // Position
+  const [posMin, setPosMin] = useState('1');
+  const [posMax, setPosMax] = useState('3');
+
+  // Conservative
+  const [threshold, setThreshold] = useState('5');
+
+  // Price limits
+  const [priceLimitEnabled, setPriceLimitEnabled] = useState(false);
+  const [priceFloor, setPriceFloor] = useState('0');
+  const [priceCeil, setPriceCeil] = useState('0');
+
+  // Payment methods
+  const [payMethods, setPayMethods] = useState<string[]>([]);
+  const [selectedPayMethods, setSelectedPayMethods] = useState<string[]>([]);
+  const [syncingPay, setSyncingPay] = useState(false);
+
+  // Advanced filters
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [configJson, setConfigJson] = useState('{}');
-  const [jsonError, setJsonError] = useState('');
-
-  // Restart on save
-  const [restartOnSave, setRestartOnSave] = useState(false);
+  const [classification, setClassification] = useState('verified');
+  const [payTimeFilters, setPayTimeFilters] = useState<number[]>([]);
+  const [rivalMinMax, setRivalMinMax] = useState('0');
+  const [surplusMin, setSurplusMin] = useState('0');
+  const [ignoreMop, setIgnoreMop] = useState(false);
+  const [excludedCompetitors, setExcludedCompetitors] = useState('');
+  const [excludedAdvs, setExcludedAdvs] = useState('');
 
   // Manual price
   const [manualPrice, setManualPrice] = useState('');
+  const [restartOnSave, setRestartOnSave] = useState(false);
 
-  // Sync form from bot data on load
+  // ── Sync from bot data ────────────────────────────────────────────────────
   useEffect(() => {
     if (!bot) return;
-    setMode(bot.mode ?? 'POSITION');
-    setRiskProfile(bot.riskProfile ?? 'MODERATE');
-    const c = (bot.config ?? {}) as Record<string, unknown>;
-    if (c.targetPosition != null)  setTargetPosition(String(c.targetPosition));
-    if (c.fixedPrice != null)      setFixedPrice(String(c.fixedPrice));
-    if (c.spreadVes != null)       setSpreadVes(String(c.spreadVes));
-    if (c.minPrice != null)        setMinPrice(String(c.minPrice));
-    if (c.maxPrice != null)        setMaxPrice(String(c.maxPrice));
-    if (c.intervalMs != null)      setIntervalSec(String(Math.round(Number(c.intervalMs) / 1000)));
-    else if (c.intervalSec != null) setIntervalSec(String(c.intervalSec));
-    setConfigJson(JSON.stringify(c, null, 2));
+    const c = (bot.config ?? {}) as Record<string, any>;
+    setLabel(bot.label || c.label || '');
+    setMode((bot.mode || c.mode || 'smart').toLowerCase());
+    setRiskProfile((bot.riskProfile || c.risk_profile || 'moderate').toLowerCase());
+
+    // Smart
+    setTargetPos(String(c.target_position ?? c.targetPosition ?? 1));
+    setIncrement(String(c.increment ?? 0.02));
+    setGapTol(String(c.gap_tolerance ?? c.gapTolerance ?? 0.01));
+
+    // Position
+    setPosMin(String(c.pos_min ?? c.posMin ?? 1));
+    setPosMax(String(c.pos_max ?? c.posMax ?? 3));
+
+    // Conservative
+    setThreshold(String(c.conservative_threshold ?? c.threshold ?? 5));
+
+    // Price limits
+    setPriceLimitEnabled(!!c.price_limit_enabled || !!c.priceLimitEnabled);
+    setPriceFloor(String(c.price_floor ?? c.priceFloor ?? c.minPrice ?? 0));
+    setPriceCeil(String(c.price_ceil ?? c.priceCeil ?? c.maxPrice ?? 0));
+
+    // Payment methods
+    if (Array.isArray(c.pay_methods)) { setPayMethods(c.pay_methods); setSelectedPayMethods(c.pay_methods); }
+
+    // Advanced
+    setClassification(c.classification || 'verified');
+    setPayTimeFilters(Array.isArray(c.pay_time_filters) ? c.pay_time_filters : []);
+    setRivalMinMax(String(c.rival_min_max ?? 0));
+    setSurplusMin(String(c.surplus_min ?? 0));
+    setIgnoreMop(!!c.ignore_pay_methods);
+    setExcludedCompetitors(Array.isArray(c.excluded_competitors) ? c.excluded_competitors.join(', ') : (c.excluded_competitors || ''));
+    setExcludedAdvs(Array.isArray(c.excluded_advs) ? c.excluded_advs.join(', ') : (c.excluded_advs || ''));
   }, [bot]);
 
-  // Build config object from guided fields
-  function buildConfig(): Record<string, unknown> {
-    const cfg: Record<string, unknown> = {};
-    const pos = parseInt(targetPosition);
-    const sprd = parseFloat(spreadVes);
-    const fp = parseFloat(fixedPrice);
-    const mn = parseFloat(minPrice);
-    const mx = parseFloat(maxPrice);
-    const iv = parseInt(intervalSec);
+  // ── Sync pay methods from Binance ─────────────────────────────────────────
+  async function syncPayMethodsFn() {
+    if (!bot) return;
+    setSyncingPay(true);
+    try {
+      const { data } = await api.post(`/bots/${botId}/sync-pay-methods`);
+      if (Array.isArray(data.payMethods)) {
+        setPayMethods(data.payMethods);
+        setSelectedPayMethods(data.payMethods);
+        toast.success('Métodos sincronizados');
+      }
+    } catch { toast.error('Error al sincronizar métodos'); }
+    finally { setSyncingPay(false); }
+  }
 
-    if (mode === 'POSITION' || mode === 'SMART') {
-      if (!isNaN(pos)) cfg.targetPosition = pos;
+  function togglePayTime(val: number) {
+    setPayTimeFilters(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
+  }
+
+  // ── Build config ──────────────────────────────────────────────────────────
+  function buildConfig(): Record<string, any> {
+    const cfg: Record<string, any> = { label };
+    cfg.mode = mode;
+    cfg.risk_profile = riskProfile;
+
+    if (mode === 'smart') {
+      cfg.target_position = parseInt(targetPos) || 1;
+      cfg.increment = parseFloat(increment) || 0.02;
+      cfg.gap_tolerance = parseFloat(gapTol) || 0.01;
+    } else if (mode === 'position') {
+      cfg.pos_min = parseInt(posMin) || 1;
+      cfg.pos_max = parseInt(posMax) || 3;
+    } else if (mode === 'conservative') {
+      cfg.conservative_threshold = parseFloat(threshold) || 5;
     }
-    if (mode === 'PRICE') {
-      if (!isNaN(fp)) cfg.fixedPrice = fp;
+
+    cfg.price_limit_enabled = priceLimitEnabled;
+    if (priceLimitEnabled) {
+      cfg.price_floor = parseFloat(priceFloor) || 0;
+      cfg.price_ceil = parseFloat(priceCeil) || 0;
     }
-    if (mode !== 'PRICE') {
-      if (!isNaN(sprd)) cfg.spreadVes = sprd;
-    }
-    if (!isNaN(mn) && minPrice !== '') cfg.minPrice = mn;
-    if (!isNaN(mx) && maxPrice !== '') cfg.maxPrice = mx;
-    if (!isNaN(iv) && iv > 0) cfg.intervalMs = iv * 1000;
+
+    cfg.pay_methods = selectedPayMethods;
+    cfg.classification = classification;
+    cfg.pay_time_filters = payTimeFilters;
+    cfg.rival_min_max = parseFloat(rivalMinMax) || 0;
+    cfg.surplus_min = parseFloat(surplusMin) || 0;
+    cfg.ignore_pay_methods = ignoreMop;
+    cfg.excluded_competitors = excludedCompetitors.split(',').map(s => s.trim()).filter(Boolean);
+    cfg.excluded_advs = excludedAdvs.split(',').map(s => s.trim()).filter(Boolean);
+
     return cfg;
   }
 
+  // ── Save ──────────────────────────────────────────────────────────────────
   const saveConfig = useMutation({
     mutationFn: () => {
-      const config = showAdvanced ? (() => {
-        try { return JSON.parse(configJson); }
-        catch { throw new Error('JSON inválido'); }
-      })() : buildConfig();
-      return api.put(`/bots/${botId}`, { mode, riskProfile, config });
+      const config = buildConfig();
+      return api.put(`/bots/${botId}`, { mode: mode.toUpperCase(), riskProfile: riskProfile.toUpperCase(), config });
     },
     onSuccess: async () => {
       toast.success('Configuración guardada');
-      qc.invalidateQueries({ queryKey: ['bots', botId] });
       qc.invalidateQueries({ queryKey: ['bots'] });
-
       if (restartOnSave && bot?.status === 'RUNNING') {
         try {
           await api.post(`/bots/${botId}/stop`);
           await api.post(`/bots/${botId}/start`);
-          toast.success('Bot reiniciado con nueva configuración');
-          qc.invalidateQueries({ queryKey: ['bots', botId] });
+          toast.success('Bot reiniciado');
           qc.invalidateQueries({ queryKey: ['bots'] });
-        } catch {
-          toast.error('Config guardada pero no se pudo reiniciar el bot');
-        }
+        } catch { toast.error('No se pudo reiniciar'); }
       }
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: () => toast.error('Error al guardar'),
   });
 
   const toggleBot = useMutation({
-    mutationFn: () => {
-      const action = bot?.status === 'RUNNING' ? 'stop' : 'start';
-      return api.post(`/bots/${botId}/${action}`);
-    },
-    onSuccess: () => {
-      toast.success(bot?.status === 'RUNNING' ? 'Bot detenido' : 'Bot iniciado');
-      qc.invalidateQueries({ queryKey: ['bots', botId] });
-      qc.invalidateQueries({ queryKey: ['bots'] });
-    },
-    onError: () => toast.error('Error al cambiar estado del bot'),
+    mutationFn: () => api.post(`/bots/${botId}/${bot?.status === 'RUNNING' ? 'stop' : 'start'}`),
+    onSuccess: () => { toast.success(bot?.status === 'RUNNING' ? 'Bot detenido' : 'Bot iniciado'); qc.invalidateQueries({ queryKey: ['bots'] }); },
+    onError: () => toast.error('Error'),
   });
 
   const updatePrice = useMutation({
     mutationFn: (price: number) => api.post(`/bots/${botId}/update-price`, { price }),
-    onSuccess: (res) => {
-      toast.success(`Precio actualizado a ${res.data.price} VES`);
-      qc.invalidateQueries({ queryKey: ['bots', botId] });
-      qc.invalidateQueries({ queryKey: ['bots', botId, 'price-history', 100] });
-      setManualPrice('');
-    },
-    onError: () => toast.error('Error al actualizar precio'),
+    onSuccess: (res) => { toast.success(`Precio: ${res.data.price} VES`); qc.invalidateQueries({ queryKey: ['bots'] }); setManualPrice(''); },
+    onError: () => toast.error('Error'),
   });
-
-  const validateJson = (value: string) => {
-    setConfigJson(value);
-    try { JSON.parse(value); setJsonError(''); }
-    catch { setJsonError('JSON inválido'); }
-  };
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Cargando...</div>;
   if (error || !bot) return <div className="p-6 text-red-400">Bot no encontrado</div>;
 
   const isRunning = bot.status === 'RUNNING';
-  const currentPrice = history.length > 0
-    ? Number(history[history.length - 1].price)
-    : (bot.currentPrice ?? null);
-
-  const statusColor = {
-    RUNNING: 'text-green-400',
-    STOPPED: 'text-muted-foreground',
-    ERROR:   'text-red-400',
-    PAUSED:  'text-yellow-400',
-  }[bot.status] ?? 'text-muted-foreground';
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-6 max-w-2xl space-y-4">
       {/* Header */}
-      <button
-        onClick={() => router.push('/bots')}
-        className="text-sm text-muted-foreground hover:text-foreground mb-6 flex items-center gap-1"
-      >
-        ← Volver a Bots
-      </button>
-
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-xl font-semibold">Config Bot</h1>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-          isRunning ? 'border-green-500/40 bg-green-500/10 text-green-400'
-          : bot.status === 'ERROR' ? 'border-red-500/40 bg-red-500/10 text-red-400'
-          : 'border-border bg-secondary text-muted-foreground'
-        }`}>
-          {bot.status}
-        </span>
+      <div className="flex items-center gap-3">
+        <button onClick={() => router.push('/bots')} className="text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div className="flex-1">
+          <h1 className="text-lg font-bold">Configurar Bot</h1>
+          <p className="text-xs text-muted-foreground">
+            {bot.asset}/{bot.fiat} · advNo: <span className="font-mono">{bot.advNo}</span> · {bot.account.label}
+          </p>
+        </div>
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+          isRunning ? 'border-green-500/40 bg-green-500/10 text-green-400' : 'border-border bg-secondary text-muted-foreground'
+        }`}>{bot.status}</span>
       </div>
-      <p className="text-sm text-muted-foreground mb-6">
-        advNo: <span className="font-mono text-foreground">{bot.advNo}</span> · Cuenta:{' '}
-        <span className="text-foreground">{bot.account.label}</span>
-        {currentPrice !== null && (
-          <> · Precio: <span className="font-mono text-primary">{currentPrice.toLocaleString('es-VE', { minimumFractionDigits: 2 })} VES</span></>
-        )}
-      </p>
 
       {bot.lastError && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-sm text-red-400">
-          {bot.lastError}
-        </div>
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">{bot.lastError}</div>
       )}
 
-      {/* === Config form === */}
-      <div className="space-y-5 bg-card border border-border rounded-lg p-5 mb-6">
-        <h2 className="font-medium">Motor de precio</h2>
+      {/* ── Nombre ──────────────────────────────────────────────────────── */}
+      <ConfigCard title="Nombre del bot">
+        <input
+          type="text"
+          value={label}
+          onChange={e => setLabel(e.target.value)}
+          placeholder="Ej: Venta USDT/VES Principal"
+          className={inputClass}
+        />
+      </ConfigCard>
 
-        {/* Mode selector */}
-        <Field label="Modo de precio">
-          <div className="grid grid-cols-1 gap-2">
-            {MODES.map(m => (
-              <button
-                key={m.value}
-                onClick={() => setMode(m.value)}
-                className={`flex items-start gap-3 px-3 py-2.5 rounded border text-left transition-colors ${
-                  mode === m.value
-                    ? 'border-primary bg-primary/10 text-foreground'
-                    : 'border-border bg-secondary text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                }`}
-              >
-                <span className={`mt-0.5 text-xs font-bold rounded px-1.5 py-0.5 shrink-0 ${
-                  mode === m.value ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
-                }`}>{m.value}</span>
-                <div>
-                  <span className="text-sm font-medium">{m.label}</span>
-                  <p className="text-xs text-muted-foreground">{m.desc}</p>
-                </div>
-              </button>
+      {/* ── Métodos de pago ─────────────────────────────────────────────── */}
+      <ConfigCard
+        title="Métodos de pago a competir"
+        extra={
+          <button onClick={syncPayMethodsFn} disabled={syncingPay} className="text-xs text-primary flex items-center gap-1 hover:underline disabled:opacity-50">
+            <RefreshCw size={11} className={syncingPay ? 'animate-spin' : ''} /> Sincronizar
+          </button>
+        }
+      >
+        <p className="text-xs text-muted-foreground -mt-1">Selecciona contra cuáles métodos quieres competir.</p>
+        {payMethods.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Sin métodos — presiona Sincronizar</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {payMethods.map(m => (
+              <label key={m} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+                selectedPayMethods.includes(m)
+                  ? 'border-primary/50 bg-primary/10 text-primary'
+                  : 'border-border bg-white/5 text-muted-foreground'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={selectedPayMethods.includes(m)}
+                  onChange={() => setSelectedPayMethods(prev =>
+                    prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]
+                  )}
+                  className="accent-primary w-3 h-3"
+                />
+                {m}
+              </label>
             ))}
           </div>
-        </Field>
+        )}
+      </ConfigCard>
 
-        {/* Risk profile */}
-        <Field label="Perfil de riesgo">
-          <div className="flex gap-2">
-            {RISK_PROFILES.map(r => (
-              <button
-                key={r.value}
-                onClick={() => setRiskProfile(r.value)}
-                title={r.desc}
-                className={`flex-1 px-3 py-2 rounded border text-sm transition-colors ${
-                  riskProfile === r.value
-                    ? 'border-primary bg-primary/10 text-foreground font-medium'
-                    : 'border-border bg-secondary text-muted-foreground hover:border-primary/40'
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </Field>
-
-        <div className="border-t border-border pt-4 space-y-4">
-          {/* POSITION mode: target position */}
-          {(mode === 'POSITION' || mode === 'SMART') && (
-            <Field
-              label="Posición objetivo"
-              hint="1 = el precio más bajo del mercado (más competitivo). 2 = segundo más bajo, etc."
+      {/* ── Modo de operación ───────────────────────────────────────────── */}
+      <ConfigCard title="Modo de operación">
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { key: 'smart', icon: '⚡', name: 'Smart', desc: 'Posición inteligente' },
+            { key: 'position', icon: '🎯', name: 'Posición', desc: 'Rango fijo' },
+            { key: 'conservative', icon: '🛡️', name: 'Conservador', desc: 'Hueco estable' },
+          ].map(m => (
+            <button
+              key={m.key}
+              onClick={() => setMode(m.key)}
+              className={`p-3 rounded-xl border text-center transition-all ${
+                mode === m.key
+                  ? 'border-primary bg-primary/10 shadow-[0_0_12px_theme(colors.primary/20%)]'
+                  : 'border-border bg-white/3 hover:border-primary/40'
+              }`}
             >
-              <NumberInput
-                value={targetPosition}
-                onChange={setTargetPosition}
-                placeholder="1"
-                step="1"
-                min="1"
-                max="20"
-              />
-            </Field>
-          )}
-
-          {/* PRICE/fixed mode: fixed price */}
-          {mode === 'PRICE' && (
-            <Field
-              label="Precio fijo (VES)"
-              hint="El bot mantendrá exactamente este precio en el anuncio."
-            >
-              <NumberInput value={fixedPrice} onChange={setFixedPrice} placeholder="649.00" />
-            </Field>
-          )}
-
-          {/* Spread — all modes except PRICE */}
-          {mode !== 'PRICE' && (
-            <Field
-              label="Spread (VES)"
-              hint="Cuánto por debajo del competidor de referencia se pone el precio (default: 0.01)."
-            >
-              <NumberInput value={spreadVes} onChange={setSpreadVes} placeholder="0.01" />
-            </Field>
-          )}
-
-          {/* Price floor and ceiling */}
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Precio mínimo (VES)" hint="Límite de seguridad inferior. Vacío = sin límite.">
-              <NumberInput value={minPrice} onChange={setMinPrice} placeholder="600.00" />
-            </Field>
-            <Field label="Precio máximo (VES)" hint="Límite de seguridad superior. Vacío = sin límite.">
-              <NumberInput value={maxPrice} onChange={setMaxPrice} placeholder="700.00" />
-            </Field>
-          </div>
-
-          {/* Interval */}
-          <Field label="Intervalo de tick (segundos)" hint="Cada cuántos segundos el bot actualiza el precio (mínimo 5s).">
-            <NumberInput value={intervalSec} onChange={setIntervalSec} placeholder="8" step="1" min="5" />
-          </Field>
+              <div className="text-xl mb-1">{m.icon}</div>
+              <div className="text-sm font-semibold">{m.name}</div>
+              <div className="text-[10px] text-muted-foreground">{m.desc}</div>
+            </button>
+          ))}
         </div>
 
-        {/* Advanced JSON toggle */}
-        <div className="border-t border-border pt-4">
-          <button
-            onClick={() => {
-              if (!showAdvanced) setConfigJson(JSON.stringify(buildConfig(), null, 2));
-              setShowAdvanced(v => !v);
-            }}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            JSON avanzado
-          </button>
-          {showAdvanced && (
-            <div className="mt-3">
-              <textarea
-                value={configJson}
-                onChange={e => validateJson(e.target.value)}
-                className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm font-mono text-foreground h-40 focus:outline-none focus:border-primary resize-none"
-                placeholder="{}"
-              />
-              {jsonError && <p className="text-xs text-red-400 mt-1">{jsonError}</p>}
+        {/* Mode-specific params */}
+        <div className="mt-4 space-y-3">
+          {mode === 'smart' && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Posición objetivo</label>
+                  <input type="number" value={targetPos} onChange={e => setTargetPos(e.target.value)} min="1" max="20" className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Incremento mínimo</label>
+                  <input type="number" value={increment} onChange={e => setIncrement(e.target.value)} step="0.001" className={inputClass} />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Gap tolerance — no mover si ya ganás por ≥</label>
+                <input type="number" value={gapTol} onChange={e => setGapTol(e.target.value)} step="0.001" className={inputClass} />
+              </div>
+            </>
+          )}
+          {mode === 'position' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Posición mínima</label>
+                <input type="number" value={posMin} onChange={e => setPosMin(e.target.value)} min="1" max="40" className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Posición máxima</label>
+                <input type="number" value={posMax} onChange={e => setPosMax(e.target.value)} min="1" max="40" className={inputClass} />
+              </div>
+            </div>
+          )}
+          {mode === 'conservative' && (
+            <div>
+              <label className={labelClass}>Umbral de hueco estable (bps)</label>
+              <input type="number" value={threshold} onChange={e => setThreshold(e.target.value)} step="0.1" className={inputClass} />
             </div>
           )}
         </div>
+      </ConfigCard>
 
-        {/* Actions */}
-        <div className="space-y-3 pt-2">
-          {isRunning && (
-            <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-              <input
-                type="checkbox"
-                checked={restartOnSave}
-                onChange={e => setRestartOnSave(e.target.checked)}
-                className="w-4 h-4 rounded accent-primary"
-              />
-              <span className="text-sm text-muted-foreground">
-                Reiniciar bot al guardar
-              </span>
-            </label>
-          )}
-          <div className="flex gap-3">
-            <Button
-              onClick={() => saveConfig.mutate()}
-              disabled={saveConfig.isPending || (showAdvanced && !!jsonError)}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {saveConfig.isPending ? (restartOnSave && isRunning ? 'Guardando y reiniciando...' : 'Guardando...') : 'Guardar configuración'}
-            </Button>
-            <Button
-              onClick={() => toggleBot.mutate()}
-              disabled={toggleBot.isPending || saveConfig.isPending}
-              variant={isRunning ? 'destructive' : 'secondary'}
-            >
-              {toggleBot.isPending ? 'Procesando...' : isRunning ? '■ Detener' : '▶ Iniciar'}
-            </Button>
+      {/* ── Límite de precio ────────────────────────────────────────────── */}
+      <ConfigCard title="Límite de precio" extra={
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" checked={priceLimitEnabled} onChange={e => setPriceLimitEnabled(e.target.checked)} className="sr-only peer" />
+          <div className="w-9 h-5 bg-white/10 rounded-full peer-checked:bg-primary/60 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+        </label>
+      }>
+        {priceLimitEnabled && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelClass}>🔻 Piso — no bajar de (SELL)</label>
+              <input type="number" value={priceFloor} onChange={e => setPriceFloor(e.target.value)} step="0.01" placeholder="0 = sin límite" className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>🔺 Techo — no subir de (BUY)</label>
+              <input type="number" value={priceCeil} onChange={e => setPriceCeil(e.target.value)} step="0.01" placeholder="0 = sin límite" className={inputClass} />
+            </div>
           </div>
-        </div>
+        )}
+      </ConfigCard>
+
+      {/* ── Filtros avanzados (collapsible) ──────────────────────────────── */}
+      <button
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="w-full flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground py-2 transition-colors"
+      >
+        ⚙️ Filtros avanzados {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+
+      {showAdvanced && (
+        <ConfigCard title="">
+          <div className="space-y-4">
+            {/* Risk + Classification */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Perfil de riesgo (intervalo)</label>
+                <select value={riskProfile} onChange={e => setRiskProfile(e.target.value)} className={inputClass}>
+                  <option value="aggressive">Agresivo (5s)</option>
+                  <option value="moderate">Moderado (15s)</option>
+                  <option value="conservative">Conservador (30s)</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Clasificación competidores</label>
+                <select value={classification} onChange={e => setClassification(e.target.value)} className={inputClass}>
+                  <option value="verified">Solo verificados (Merchants)</option>
+                  <option value="all">Todos (incl. no verificados)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Pay time filters */}
+            <div>
+              <label className={labelClass}>Tiempo de pago (filtrar competidores)</label>
+              <p className="text-[10px] text-muted-foreground mb-2">Solo competir contra anuncios con estos límites de tiempo. Vacío = todos.</p>
+              <div className="flex flex-wrap gap-2">
+                {[15, 30, 45, 60, 120, 180].map(t => (
+                  <label key={t} className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg cursor-pointer text-xs transition-colors ${
+                    payTimeFilters.includes(t) ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-white/5 text-muted-foreground'
+                  }`}>
+                    <input type="checkbox" checked={payTimeFilters.includes(t)} onChange={() => togglePayTime(t)} className="accent-primary w-3 h-3" />
+                    {t} min
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Rival filters */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>🎯 Ignorar rivales con mínimo mayor a (fiat)</label>
+                <input type="number" value={rivalMinMax} onChange={e => setRivalMinMax(e.target.value)} placeholder="0 = sin filtro" className={inputClass} />
+                <p className="text-[10px] text-muted-foreground mt-1">Solo compite con rivales que acepten montos pequeños</p>
+              </div>
+              <div>
+                <label className={labelClass}>📦 USDT mínimo en stock del rival</label>
+                <input type="number" value={surplusMin} onChange={e => setSurplusMin(e.target.value)} placeholder="0 = sin filtro" className={inputClass} />
+                <p className="text-[10px] text-muted-foreground mt-1">Ignora rivales con menos USDT disponible</p>
+              </div>
+            </div>
+
+            {/* Ignore MOP */}
+            <div className="flex items-center gap-3">
+              <label className={labelClass + ' mb-0'}>Ignorar filtro MOP</label>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" checked={ignoreMop} onChange={e => setIgnoreMop(e.target.checked)} className="sr-only peer" />
+                <div className="w-9 h-5 bg-white/10 rounded-full peer-checked:bg-primary/60 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+              </label>
+              <span className="text-[10px] text-muted-foreground">Compite con todos sin importar método de pago</span>
+            </div>
+
+            {/* Exclusions */}
+            <div>
+              <label className={labelClass}>Excluir por nickname (separados por coma)</label>
+              <input value={excludedCompetitors} onChange={e => setExcludedCompetitors(e.target.value)} placeholder="rival1, rival2" className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Excluir anuncios específicos (AdvNo)</label>
+              <input value={excludedAdvs} onChange={e => setExcludedAdvs(e.target.value)} placeholder="12345678, 87654321" className={inputClass} />
+            </div>
+          </div>
+        </ConfigCard>
+      )}
+
+      {/* ── Footer actions ──────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 pt-2">
+        {isRunning && (
+          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground">
+            <input type="checkbox" checked={restartOnSave} onChange={e => setRestartOnSave(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
+            Reiniciar al guardar
+          </label>
+        )}
+        <div className="flex-1" />
+        <Button variant="outline" onClick={() => router.push('/bots')}>Cancelar</Button>
+        <Button onClick={() => saveConfig.mutate()} disabled={saveConfig.isPending} className="bg-primary text-primary-foreground hover:bg-primary/90">
+          {saveConfig.isPending ? 'Guardando...' : 'Guardar configuración'}
+        </Button>
       </div>
 
-      {/* Manual price override */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-3 mb-6">
-        <div>
-          <h3 className="font-semibold">Precio manual</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Aplica un precio puntual al anuncio ahora mismo. No cambia el modo del bot.
-          </p>
-        </div>
+      {/* ── Manual price ────────────────────────────────────────────────── */}
+      <ConfigCard title="Precio manual">
+        <p className="text-xs text-muted-foreground -mt-1">Aplica un precio puntual ahora. No cambia el modo del bot.</p>
         <div className="flex gap-2">
-          <input
-            type="number"
-            step="0.01"
-            value={manualPrice}
-            onChange={e => setManualPrice(e.target.value)}
-            placeholder="649.59"
-            className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-          <Button
-            onClick={() => manualPrice && updatePrice.mutate(parseFloat(manualPrice))}
-            disabled={!manualPrice || updatePrice.isPending}
-            size="sm"
-          >
+          <input type="number" step="0.01" value={manualPrice} onChange={e => setManualPrice(e.target.value)} placeholder="649.59" className={inputClass + ' flex-1'} />
+          <Button size="sm" onClick={() => manualPrice && updatePrice.mutate(parseFloat(manualPrice))} disabled={!manualPrice || updatePrice.isPending}>
             {updatePrice.isPending ? 'Aplicando...' : 'Aplicar'}
           </Button>
         </div>
+      </ConfigCard>
+
+      {/* ── Start/Stop ──────────────────────────────────────────────────── */}
+      <div className="flex gap-2">
+        <Button onClick={() => toggleBot.mutate()} disabled={toggleBot.isPending} variant={isRunning ? 'destructive' : 'default'}
+          className={isRunning ? '' : 'bg-green-600 hover:bg-green-700 text-white'}>
+          {toggleBot.isPending ? 'Procesando...' : isRunning ? '■ Detener bot' : '▶ Iniciar bot'}
+        </Button>
       </div>
 
-      {/* Price history chart */}
-      <div className="bg-card border border-border rounded-lg p-5">
-        <h2 className="text-sm font-medium mb-4">
-          Historial de precios ({history.length} ticks)
-        </h2>
+      {/* ── Price chart ─────────────────────────────────────────────────── */}
+      <ConfigCard title={`Historial de precios (${history.length} ticks)`}>
         <PriceChart ticks={history} />
-      </div>
+      </ConfigCard>
     </div>
   );
 }

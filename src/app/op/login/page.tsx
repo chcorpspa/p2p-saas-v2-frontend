@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'https://p2p.chcorporacion.com/api';
+const API = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 function LoginForm() {
   const router = useRouter();

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { RefreshCw, LogOut, CheckCircle, XCircle, Clock, AlertCircle, Phone } from 'lucide-react';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'https://p2p.chcorporacion.com/api';
+const API = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 interface Order {
   orderNo: string;
