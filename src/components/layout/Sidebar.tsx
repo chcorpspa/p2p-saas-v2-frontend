@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
-  Bot, BarChart2, MessageSquare, List, Megaphone, Users,
-  Settings, ShieldCheck, Bell, LogOut, TrendingUp,
+  Bot, BarChart2, MessageSquare, List, Users,
+  ShieldCheck, Bell, LogOut, TrendingUp, Key, BellRing,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -12,12 +12,12 @@ const links = [
   { href: '/', label: 'Overview', icon: BarChart2 },
   { href: '/bots', label: 'Bots', icon: Bot },
   { href: '/orders', label: 'Órdenes', icon: List },
-  { href: '/chat', label: 'Chat', icon: MessageSquare },
   { href: '/pnl', label: 'P&L', icon: TrendingUp },
-  { href: '/ads', label: 'Anuncios', icon: Megaphone },
+  { href: '/accounts', label: 'Cuentas', icon: Key },
   { href: '/operators', label: 'Operadores', icon: Users },
   { href: '/auto-messages', label: 'Auto-mensajes', icon: Bell },
-  { href: '/settings', label: 'Configuración', icon: Settings },
+  { href: '/notifications', label: 'Notificaciones', icon: BellRing },
+  { href: '/chat', label: 'Chat', icon: MessageSquare },
 ];
 
 export function Sidebar() {
