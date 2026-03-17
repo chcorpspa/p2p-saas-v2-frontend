@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   Bot, BarChart2, MessageSquare, List, Users,
-  ShieldCheck, Bell, LogOut, TrendingUp, Key, BellRing, Megaphone,
+  ShieldCheck, Bell, LogOut, TrendingUp, Key, BellRing, Megaphone, Settings,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -19,6 +19,7 @@ const links = [
   { href: '/auto-messages', label: 'Auto-mensajes', icon: Bell },
   { href: '/notifications', label: 'Notificaciones', icon: BellRing },
   { href: '/chat', label: 'Chat', icon: MessageSquare },
+  { href: '/settings', label: 'Configuración', icon: Settings },
 ];
 
 export function Sidebar() {
