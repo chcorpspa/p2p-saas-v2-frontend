@@ -100,6 +100,7 @@ export default function OrdersPage() {
   const [historySearch, setHistorySearch] = useState('');
   const [historyTypeFilter, setHistoryTypeFilter] = useState<'ALL' | 'BUY' | 'SELL'>('ALL');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [activeSearch, setActiveSearch] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -332,11 +333,24 @@ export default function OrdersPage() {
 
           {/* Left: Order List */}
           <div className="w-1/3 border-r border-border flex flex-col">
+            <div className="p-2 border-b border-border">
+              <input
+                type="text"
+                value={activeSearch}
+                onChange={e => setActiveSearch(e.target.value)}
+                placeholder="Buscar por orden, nombre..."
+                className="w-full text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-foreground focus:outline-none focus:border-primary/50"
+              />
+            </div>
             <div className="flex-1 overflow-y-auto">
               {activeOrders.length === 0 && (
                 <div className="p-6 text-center text-muted-foreground text-sm">Sin órdenes activas</div>
               )}
-              {activeOrders.map((o: ActiveOrder) => (
+              {activeOrders.filter((o: ActiveOrder) => {
+                if (!activeSearch) return true;
+                const q = activeSearch.toLowerCase();
+                return o.orderNo.toLowerCase().includes(q) || o.counterPartNickName.toLowerCase().includes(q);
+              }).map((o: ActiveOrder) => (
                 <button
                   key={o.orderNo}
                   onClick={() => setSelectedOrder(o)}

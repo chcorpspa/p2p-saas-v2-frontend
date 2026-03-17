@@ -178,6 +178,12 @@ export default function OverviewPage() {
 
   // ── Queries ──────────────────────────────────────────────────────────────
 
+  const { data: me } = useQuery<{ plan: string; planExpires?: string }>({
+    queryKey: ['me'],
+    queryFn: () => api.get('/auth/me').then(r => r.data),
+    staleTime: 60_000,
+  });
+
   const { data: accounts, isLoading: loadingAccounts } = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn: () => api.get('/accounts').then((r) => r.data),
@@ -233,34 +239,60 @@ export default function OverviewPage() {
       </div>
 
       {/* Plan info card */}
-      <div className="bg-card border border-border rounded-xl p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
-              <DollarSign className="w-4 h-4 text-primary" />
+      {(() => {
+        const planName = me?.plan || 'PRO';
+        const expires = me?.planExpires ? new Date(me.planExpires) : null;
+        const daysLeft = expires ? Math.ceil((expires.getTime() - Date.now()) / 86400000) : null;
+        const expiryColor = daysLeft === null ? 'text-muted-foreground' : daysLeft <= 0 ? 'text-red-500' : daysLeft <= 3 ? 'text-red-400' : daysLeft <= 7 ? 'text-orange-400' : 'text-green-400';
+        return (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+                  <DollarSign className="w-4 h-4 text-primary" />
+                </div>
+                <span className="font-bold text-foreground">Plan {planName}</span>
+              </div>
+              {daysLeft !== null && (
+                <span className={`text-xs font-semibold ${expiryColor}`}>
+                  {daysLeft <= 0 ? 'Expirado' : `${daysLeft} días restantes`}
+                </span>
+              )}
             </div>
-            <span className="font-bold text-foreground">Plan {(accounts?.[0] as any)?.tenant?.plan || 'PRO'}</span>
+            <div className="grid grid-cols-4 gap-4 text-center">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Cuentas</p>
+                <p className="text-lg font-bold text-foreground">{activeAccounts}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Bots</p>
+                <p className="text-lg font-bold text-foreground">{totalBots}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Activos</p>
+                <p className="text-lg font-bold text-green-400">{runningBots}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Ganancia</p>
+                <p className={`text-lg font-bold ${netPositive ? 'text-green-400' : netNegative ? 'text-red-400' : 'text-foreground'}`}>{formatUsdt(totalNet)}</p>
+              </div>
+            </div>
+            {expires && (
+              <div className="mt-3">
+                <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{
+                    width: `${Math.max(0, Math.min(100, (daysLeft ?? 0) / 30 * 100))}%`,
+                    background: daysLeft !== null && daysLeft <= 3 ? '#ef4444' : daysLeft !== null && daysLeft <= 7 ? '#f59e0b' : '#6857ff',
+                  }} />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Vence: {expires.toLocaleDateString('es-VE')}
+                </p>
+              </div>
+            )}
           </div>
-        </div>
-        <div className="grid grid-cols-4 gap-4 text-center">
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Cuentas</p>
-            <p className="text-lg font-bold text-foreground">{activeAccounts}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Bots</p>
-            <p className="text-lg font-bold text-foreground">{totalBots}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Activos</p>
-            <p className="text-lg font-bold text-green-400">{runningBots}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Ganancia</p>
-            <p className={`text-lg font-bold ${netPositive ? 'text-green-400' : netNegative ? 'text-red-400' : 'text-foreground'}`}>{formatUsdt(totalNet)}</p>
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Stat Cards */}
       {isInitialLoading ? (
