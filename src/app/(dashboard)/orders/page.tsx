@@ -286,7 +286,7 @@ export default function OrdersPage() {
                       {m.msgType === 3 && m.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}/api/image-proxy?url=${encodeURIComponent(m.imageUrl)}`}
+                          src={`${process.env.NEXT_PUBLIC_API_URL}/image-proxy?url=${encodeURIComponent(m.imageUrl)}`}
                           alt="img"
                           className="max-w-[180px] rounded"
                         />

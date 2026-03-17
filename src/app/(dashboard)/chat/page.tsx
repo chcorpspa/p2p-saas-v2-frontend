@@ -87,7 +87,7 @@ export default function ChatPage() {
       (typeof msg.content === 'string' && msg.content.startsWith('http'));
 
     if (isImage) {
-      const proxied = `/api/image-proxy?url=${encodeURIComponent(msg.content)}`;
+      const proxied = `${process.env.NEXT_PUBLIC_API_URL}/image-proxy?url=${encodeURIComponent(msg.content)}`;
       return (
         <img
           src={proxied}
