@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
 import { useSocket } from '@/lib/socket';
 import { toast } from 'sonner';
+import { Plus, Trash2 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,12 @@ interface Bot {
   lastTickAt?: string;
   lastError?: string;
   account: { id: string; label: string };
+}
+
+interface Account {
+  id: string;
+  label: string;
+  isActive: boolean;
 }
 
 interface PriceTick {
@@ -91,12 +98,20 @@ interface BotCardProps {
   bot: Bot;
   onStop: (id: string) => void;
   onStart: (id: string) => void;
+  onDelete: (id: string) => void;
   stopPending: boolean;
   startPending: boolean;
+  deletePending: boolean;
 }
 
-function BotCard({ bot, onStop, onStart, stopPending, startPending }: BotCardProps) {
+function BotCard({ bot, onStop, onStart, onDelete, stopPending, startPending, deletePending }: BotCardProps) {
   const router = useRouter();
+
+  function handleDelete() {
+    if (window.confirm('¿Eliminar este bot? Se detendrá si está activo.')) {
+      onDelete(bot.id);
+    }
+  }
 
   return (
     <div className="bg-card border border-border rounded-lg p-4 flex flex-col gap-3">
@@ -106,9 +121,19 @@ function BotCard({ bot, onStop, onStart, stopPending, startPending }: BotCardPro
           <p className="text-xs text-muted-foreground">advNo</p>
           <p className="text-sm font-mono font-medium">{bot.advNo}</p>
         </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadge(bot.status)}`}>
-          {bot.status}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadge(bot.status)}`}>
+            {bot.status}
+          </span>
+          <button
+            onClick={handleDelete}
+            disabled={deletePending}
+            className="p-1 rounded text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors disabled:opacity-50"
+            title="Eliminar bot"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Account */}
@@ -183,12 +208,132 @@ function BotCard({ bot, onStop, onStart, stopPending, startPending }: BotCardPro
   );
 }
 
+// ─── Create Bot Modal ─────────────────────────────────────────────────────────
+
+interface CreateBotModalProps {
+  accounts: Account[];
+  onClose: () => void;
+  onCreate: (data: { accountId: string; advNo: string; asset: string; fiat: string }) => void;
+  isPending: boolean;
+}
+
+function CreateBotModal({ accounts, onClose, onCreate, isPending }: CreateBotModalProps) {
+  const [accountId, setAccountId] = useState('');
+  const [advNo, setAdvNo] = useState('');
+  const [asset, setAsset] = useState('USDT');
+  const [fiat, setFiat] = useState('VES');
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!accountId || !advNo.trim()) return;
+    onCreate({ accountId, advNo: advNo.trim(), asset, fiat });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={onClose}
+    >
+      <div
+        className="bg-card border border-border rounded-xl p-6 w-full max-w-md mx-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold mb-5">Crear Bot</h2>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* Cuenta */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Cuenta</label>
+            <select
+              value={accountId}
+              onChange={e => setAccountId(e.target.value)}
+              required
+              className="bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="" disabled>Seleccionar cuenta...</option>
+              {accounts.map(acc => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* advNo */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Número de anuncio (advNo)</label>
+            <input
+              type="text"
+              value={advNo}
+              onChange={e => setAdvNo(e.target.value)}
+              placeholder="123456789"
+              required
+              className="bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <p className="text-xs text-muted-foreground">ID del anuncio en Binance P2P</p>
+          </div>
+
+          {/* Asset */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Activo</label>
+            <select
+              value={asset}
+              onChange={e => setAsset(e.target.value)}
+              className="bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="USDT">USDT</option>
+              <option value="BTC">BTC</option>
+              <option value="BNB">BNB</option>
+            </select>
+          </div>
+
+          {/* Fiat */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Moneda Fiat</label>
+            <select
+              value={fiat}
+              onChange={e => setFiat(e.target.value)}
+              className="bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="VES">VES</option>
+              <option value="COP">COP</option>
+              <option value="ARS">ARS</option>
+              <option value="USD">USD</option>
+            </select>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={onClose}
+              disabled={isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+              disabled={isPending || !accountId || !advNo.trim()}
+            >
+              {isPending ? 'Creando...' : 'Crear Bot'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function BotsPage() {
   const qc = useQueryClient();
   const socket = useSocket();
   const [_tick, setTick] = useState(0);
+  const [showCreate, setShowCreate] = useState(false);
 
   // Re-render every 10s to update "elapsed" timestamps
   useEffect(() => {
@@ -200,6 +345,11 @@ export default function BotsPage() {
     queryKey: ['bots'],
     queryFn: () => api.get('/bots').then(r => r.data),
     refetchInterval: 15000,
+  });
+
+  const { data: accounts = [] } = useQuery<Account[]>({
+    queryKey: ['accounts'],
+    queryFn: () => api.get('/accounts').then(r => r.data),
   });
 
   // Real-time price + status updates via WebSocket
@@ -256,6 +406,26 @@ export default function BotsPage() {
     onError: () => toast.error('Error al iniciar bot'),
   });
 
+  const createBot = useMutation({
+    mutationFn: (data: { accountId: string; advNo: string; asset: string; fiat: string }) =>
+      api.post('/bots', data),
+    onSuccess: () => {
+      toast.success('Bot creado');
+      qc.invalidateQueries({ queryKey: ['bots'] });
+      setShowCreate(false);
+    },
+    onError: () => toast.error('Error al crear bot'),
+  });
+
+  const deleteBot = useMutation({
+    mutationFn: (botId: string) => api.delete(`/bots/${botId}`),
+    onSuccess: () => {
+      toast.success('Bot eliminado');
+      qc.invalidateQueries({ queryKey: ['bots'] });
+    },
+    onError: () => toast.error('Error al eliminar bot'),
+  });
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center h-full">
@@ -268,7 +438,17 @@ export default function BotsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold">Bots</h1>
-        <span className="text-sm text-muted-foreground">{bots.length} bots</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">{bots.length} bots</span>
+          <Button
+            size="sm"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5"
+            onClick={() => setShowCreate(true)}
+          >
+            <Plus size={15} />
+            Crear Bot
+          </Button>
+        </div>
       </div>
 
       {bots.length === 0 && (
@@ -284,11 +464,22 @@ export default function BotsPage() {
             bot={bot}
             onStop={id => stopBot.mutate(id)}
             onStart={id => startBot.mutate(id)}
+            onDelete={id => deleteBot.mutate(id)}
             stopPending={stopBot.isPending}
             startPending={startBot.isPending}
+            deletePending={deleteBot.isPending}
           />
         ))}
       </div>
+
+      {showCreate && (
+        <CreateBotModal
+          accounts={accounts}
+          onClose={() => setShowCreate(false)}
+          onCreate={data => createBot.mutate(data)}
+          isPending={createBot.isPending}
+        />
+      )}
     </div>
   );
 }
