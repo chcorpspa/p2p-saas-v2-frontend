@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils';
 import {
   Bot, BarChart2, MessageSquare, List, Users,
   ShieldCheck, Bell, LogOut, TrendingUp, Key, BellRing, Megaphone, Settings, X,
-  Zap,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useNotifStore } from '@/store/notifications.store';
@@ -124,10 +123,12 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         className={cn(
           'fixed md:static inset-y-0 left-0 z-50',
           'w-[220px] shrink-0 flex flex-col h-full',
-          'bg-sidebar border-r border-sidebar-border',
+          'border-r border-sidebar-border',
           'transition-transform duration-200',
+          'backdrop-blur-xl',
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
+        style={{ background: 'oklch(0.08 0.018 280 / 85%)' }}
       >
         {/* Mobile close */}
         {onClose && (
@@ -142,12 +143,21 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         {/* ── Logo ─────────────────────────────────── */}
         <div className="px-4 py-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-              <Zap className="h-4 w-4 text-primary-foreground" fill="currentColor" />
+            {/* CH P2P logo mark */}
+            <div
+              className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center font-bold text-sm text-white"
+              style={{
+                background: 'linear-gradient(135deg, oklch(0.60 0.28 280), oklch(0.48 0.26 280))',
+                boxShadow: '0 0 14px oklch(0.58 0.28 280 / 40%)',
+              }}
+            >
+              P
             </div>
             <div>
-              <p className="font-bold text-sm text-foreground leading-none tracking-tight">P2P Bot</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5 leading-none">SaaS v2</p>
+              <p className="font-bold text-sm leading-none tracking-tight" style={{ color: 'oklch(0.80 0.20 280)' }}>
+                CH P2P
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-none">Trading Bot</p>
             </div>
           </div>
         </div>

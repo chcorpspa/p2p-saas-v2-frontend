@@ -33,18 +33,22 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile top bar */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border md:hidden shrink-0">
+        <div className="glass-header flex items-center gap-3 px-4 py-3 md:hidden shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-1.5 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors"
+            style={{ background: 'oklch(0.12 0.02 280 / 60%)' }}
           >
             <Menu className="h-4 w-4" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-[9px]">P2</span>
+            <div
+              className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] text-white"
+              style={{ background: 'linear-gradient(135deg, oklch(0.60 0.28 280), oklch(0.48 0.26 280))' }}
+            >
+              P
             </div>
-            <span className="font-semibold text-sm">P2P Bot</span>
+            <span className="font-bold text-sm" style={{ color: 'oklch(0.80 0.20 280)' }}>CH P2P</span>
           </div>
         </div>
         <main className="flex-1 overflow-auto">

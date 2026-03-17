@@ -6,6 +6,7 @@ import { useSocket } from '@/lib/socket';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { Paperclip, ThumbsUp, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,7 @@ interface ActiveOrder {
   unitPrice: string;
   paymentMethod: string;
   status: string;
+  orderStatus?: number;
   createTime: number;
 }
 interface HistoryOrder {
@@ -84,10 +86,15 @@ export default function OrdersPage() {
   const [msgInput, setMsgInput] = useState('');
   const [showCancel, setShowCancel] = useState(false);
   const [cancelReason, setCancelReason] = useState<CancelReason>('buyer_requests');
+  const [showAppeal, setShowAppeal] = useState(false);
+  const [appealType, setAppealType] = useState(1);
+  const [appealReason, setAppealReason] = useState('');
   const [tab, setTab] = useState<'active' | 'history'>('active');
   const [historySearch, setHistorySearch] = useState('');
   const [historyTypeFilter, setHistoryTypeFilter] = useState<'ALL' | 'BUY' | 'SELL'>('ALL');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch accounts
   const { data: accounts = [] } = useQuery<Account[]>({
@@ -209,6 +216,24 @@ export default function OrdersPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const openAppealMut = useMutation({
+    mutationFn: () =>
+      api.post(`/orders/${selectedOrder!.orderNo}/appeal`, { accountId, appealType, appealReason }).then(r => r.data),
+    onSuccess: () => {
+      toast.success('Apelación enviada');
+      setShowAppeal(false);
+      setAppealReason('');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const sendFeedbackMut = useMutation({
+    mutationFn: (orderNo: string) =>
+      api.post(`/orders/${orderNo}/feedback`, { accountId, feedbackType: 1 }).then(r => r.data),
+    onSuccess: () => toast.success('✓ Feedback positivo enviado'),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const sendMessage = async () => {
     if (!msgInput.trim() || !selectedOrder) return;
     const msg = msgInput.trim();
@@ -217,6 +242,25 @@ export default function OrdersPage() {
       await api.post(`/chat/${selectedOrder.orderNo}/send`, { content: msg });
     } catch {
       toast.error('Error al enviar mensaje');
+    }
+  };
+
+  const sendImage = async (file: File) => {
+    if (!selectedOrder) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error('Imagen muy grande (máx 5MB)'); return; }
+    setUploadingImage(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('accountId', accountId);
+      await api.post(`/chat/${selectedOrder.orderNo}/send-image`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      toast.success('Imagen enviada');
+    } catch {
+      toast.error('Error al enviar imagen');
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -295,13 +339,18 @@ export default function OrdersPage() {
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
                   {messages.map(m => (
                     <div key={m.id} className={`flex ${m.direction === 'OUTBOUND' ? 'justify-end' : 'justify-start'}`}>
-                      {(m.msgType === 3 || (m.imageUrl) || (typeof m.content === 'string' && m.content.startsWith('http'))) ? (
+                      {(m.msgType === 3 || m.imageUrl || (typeof m.content === 'string' && m.content.startsWith('http'))) ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={`${process.env.NEXT_PUBLIC_API_URL}/image-proxy?url=${encodeURIComponent(m.imageUrl ?? m.content)}`}
                           alt="img"
                           className="max-w-[180px] rounded"
                         />
+                      ) : m.content === '[image]' ? (
+                        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${m.direction === 'OUTBOUND' ? 'bg-primary/30 text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
+                          <ImageIcon className="w-3.5 h-3.5" />
+                          Imagen
+                        </div>
                       ) : (
                         <div className={`max-w-[70%] px-3 py-1.5 rounded-lg text-sm ${
                           m.direction === 'OUTBOUND'
@@ -315,7 +364,27 @@ export default function OrdersPage() {
                   ))}
                   <div ref={chatEndRef} />
                 </div>
-                <div className="p-3 border-t border-border flex gap-2">
+                <div className="p-3 border-t border-border flex gap-2 items-center">
+                  {/* Image upload button */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingImage}
+                    title="Enviar imagen"
+                    className="text-muted-foreground hover:text-primary transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    {uploadingImage ? (
+                      <div className="w-4 h-4 border border-primary border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Paperclip className="w-4 h-4" />
+                    )}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) sendImage(f); e.target.value = ''; }}
+                  />
                   <input
                     className="flex-1 bg-secondary border border-border rounded px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
                     placeholder="Escribe un mensaje..."
@@ -323,7 +392,7 @@ export default function OrdersPage() {
                     onChange={e => setMsgInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && sendMessage()}
                   />
-                  <Button size="sm" onClick={sendMessage} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Button size="sm" onClick={sendMessage} className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0">
                     Enviar
                   </Button>
                 </div>
@@ -366,7 +435,7 @@ export default function OrdersPage() {
                   </div>
                 </div>
 
-                {/* Actions */}
+                {/* Primary Actions */}
                 <div className="border-t border-border pt-3 space-y-2">
                   <Button
                     size="sm"
@@ -386,14 +455,6 @@ export default function OrdersPage() {
                   </Button>
                   <Button
                     size="sm"
-                    variant="destructive"
-                    className="w-full"
-                    onClick={() => setShowCancel(true)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    size="sm"
                     variant="secondary"
                     className="w-full"
                     onClick={() => requestKyc.mutate()}
@@ -401,6 +462,40 @@ export default function OrdersPage() {
                   >
                     {requestKyc.isPending ? 'Enviando...' : 'Solicitar KYC'}
                   </Button>
+                </div>
+
+                {/* Secondary Actions */}
+                <div className="flex gap-2 pt-1">
+                  {/* Feedback button */}
+                  <button
+                    onClick={() => {
+                      if (confirm('¿Enviar feedback positivo al comprador?')) {
+                        sendFeedbackMut.mutate(selectedOrder.orderNo);
+                      }
+                    }}
+                    disabled={sendFeedbackMut.isPending}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                    title="Enviar feedback positivo"
+                  >
+                    <ThumbsUp className="w-3.5 h-3.5" />
+                    {sendFeedbackMut.isPending ? '...' : 'Feedback'}
+                  </button>
+                  {/* Appeal button */}
+                  <button
+                    onClick={() => setShowAppeal(true)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded border border-orange-500/30 bg-orange-500/10 text-orange-400 text-xs hover:bg-orange-500/20 transition-colors"
+                    title="Abrir apelación"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Apelar
+                  </button>
+                  {/* Cancel button */}
+                  <button
+                    onClick={() => setShowCancel(true)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded border border-red-500/30 bg-red-500/10 text-red-400 text-xs hover:bg-red-500/20 transition-colors"
+                  >
+                    Cancelar
+                  </button>
                 </div>
 
                 {/* Cancel dialog */}
@@ -440,6 +535,54 @@ export default function OrdersPage() {
                         onClick={() => setShowCancel(false)}
                       >
                         Volver
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Appeal dialog */}
+                {showAppeal && (
+                  <div className="border border-orange-500/30 rounded-lg p-4 space-y-3 bg-orange-500/5">
+                    <p className="text-sm font-medium text-orange-400">Abrir apelación</p>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Tipo</label>
+                      <select
+                        value={appealType}
+                        onChange={e => setAppealType(+e.target.value)}
+                        className="w-full bg-secondary border border-border rounded px-2 py-1.5 text-sm text-foreground"
+                      >
+                        <option value={1}>Comprador no pagó</option>
+                        <option value={2}>Vendedor no liberó</option>
+                        <option value={3}>Problema con pago</option>
+                        <option value={4}>Otro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Motivo (opcional)</label>
+                      <textarea
+                        value={appealReason}
+                        onChange={e => setAppealReason(e.target.value)}
+                        rows={2}
+                        className="w-full bg-secondary border border-border rounded px-2 py-1.5 text-sm text-foreground resize-none focus:outline-none focus:border-primary"
+                        placeholder="Describe el problema..."
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 bg-orange-600 hover:bg-orange-500 text-white"
+                        onClick={() => openAppealMut.mutate()}
+                        disabled={openAppealMut.isPending}
+                      >
+                        {openAppealMut.isPending ? 'Enviando...' : 'Enviar apelación'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="flex-1"
+                        onClick={() => setShowAppeal(false)}
+                      >
+                        Cancelar
                       </Button>
                     </div>
                   </div>
@@ -491,12 +634,13 @@ export default function OrdersPage() {
                   <th className="text-right p-3 font-medium text-muted-foreground">Monto</th>
                   <th className="text-right p-3 font-medium text-muted-foreground">Precio</th>
                   <th className="text-left p-3 font-medium text-muted-foreground">Estado</th>
+                  <th className="p-3" />
                 </tr>
               </thead>
               <tbody>
                 {filteredHistory.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
                       Sin historial
                     </td>
                   </tr>
@@ -525,6 +669,19 @@ export default function OrdersPage() {
                       <span className={`text-xs font-medium ${STATUS_COLORS[o.orderStatus] ?? 'text-muted-foreground'}`}>
                         {STATUS_LABELS[o.orderStatus] ?? o.orderStatus}
                       </span>
+                    </td>
+                    <td className="p-3">
+                      <button
+                        onClick={() => {
+                          if (confirm('¿Enviar feedback positivo?')) {
+                            sendFeedbackMut.mutate(o.orderNo);
+                          }
+                        }}
+                        className="text-amber-400 hover:text-amber-300 transition-colors"
+                        title="Enviar feedback positivo"
+                      >
+                        <ThumbsUp className="w-3.5 h-3.5" />
+                      </button>
                     </td>
                   </tr>
                 ))}

@@ -70,7 +70,7 @@ export default function LoginPage() {
           <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
             <span className="text-primary-foreground font-bold text-base">P</span>
           </div>
-          <span className="text-xl font-bold tracking-tight">P2P Bot</span>
+          <span className="text-xl font-bold tracking-tight">CH P2P</span>
         </div>
 
         {step === 'credentials' ? (
