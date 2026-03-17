@@ -60,6 +60,24 @@ export default function AdminPage() {
     }
   }
 
+  async function resetPassword(id: string) {
+    const newPassword = window.prompt('Nueva contraseña (mín 8 chars):');
+    if (!newPassword) return;
+    if (newPassword.length < 8) {
+      alert('La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+    setSaving(id + '-reset');
+    try {
+      await api.patch(`/admin/tenants/${id}/reset-password`, { newPassword });
+      alert('Contraseña reseteada exitosamente');
+    } catch {
+      alert('Error al resetear contraseña');
+    } finally {
+      setSaving(null);
+    }
+  }
+
   if (loading) return <div className="p-8 text-muted-foreground">Cargando...</div>;
 
   return (
@@ -120,14 +138,24 @@ export default function AdminPage() {
                   {t._count.accounts} / {t._count.bots} / {t._count.orders.toLocaleString()}
                 </td>
                 <td className="p-3">
-                  <Button
-                    size="sm"
-                    variant={t.isActive ? 'destructive' : 'outline'}
-                    disabled={saving === t.id}
-                    onClick={() => toggleActive(t.id, t.isActive)}
-                  >
-                    {t.isActive ? 'Desactivar' : 'Activar'}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant={t.isActive ? 'destructive' : 'outline'}
+                      disabled={saving === t.id}
+                      onClick={() => toggleActive(t.id, t.isActive)}
+                    >
+                      {t.isActive ? 'Desactivar' : 'Activar'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={saving === t.id + '-reset'}
+                      onClick={() => resetPassword(t.id)}
+                    >
+                      Reset Pass
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}
