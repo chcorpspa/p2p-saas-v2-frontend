@@ -126,11 +126,13 @@ export default function OrdersPage() {
     return matchType && matchSearch;
   });
 
-  // Load chat history when order selected
+  // Load chat history when order selected (filter internal sentinels)
   useEffect(() => {
     if (!selectedOrder) { setMessages([]); return; }
     api.get(`/chat/${selectedOrder.orderNo}/history`)
-      .then(r => setMessages(r.data))
+      .then(r => setMessages(
+        (r.data as ChatMessage[]).filter(m => !m.content?.startsWith('__'))
+      ))
       .catch(() => setMessages([]));
   }, [selectedOrder?.orderNo]);
 
@@ -143,7 +145,7 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!socket) return;
     const onMessage = (msg: ChatMessage) => {
-      if (msg.orderNo === selectedOrder?.orderNo) {
+      if (msg.orderNo === selectedOrder?.orderNo && !msg.content?.startsWith('__')) {
         setMessages(prev => [...prev, msg]);
       }
     };
@@ -283,10 +285,10 @@ export default function OrdersPage() {
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
                   {messages.map(m => (
                     <div key={m.id} className={`flex ${m.direction === 'OUTBOUND' ? 'justify-end' : 'justify-start'}`}>
-                      {m.msgType === 3 && m.imageUrl ? (
+                      {(m.msgType === 3 || (m.imageUrl) || (typeof m.content === 'string' && m.content.startsWith('http'))) ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={`${process.env.NEXT_PUBLIC_API_URL}/image-proxy?url=${encodeURIComponent(m.imageUrl)}`}
+                          src={`${process.env.NEXT_PUBLIC_API_URL}/image-proxy?url=${encodeURIComponent(m.imageUrl ?? m.content)}`}
                           alt="img"
                           className="max-w-[180px] rounded"
                         />

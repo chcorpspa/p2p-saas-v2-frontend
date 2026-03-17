@@ -39,12 +39,14 @@ export default function ChatPage() {
     refetchInterval: 15_000,
   });
 
-  // Fetch chat history for selected order
+  // Fetch chat history for selected order (filter internal sentinels)
   const { data: messages = [] } = useQuery({
     queryKey: ['chat', selectedOrder],
     queryFn: () =>
       selectedOrder
-        ? api.get(`/chat/${selectedOrder}/history`).then(r => r.data)
+        ? api.get(`/chat/${selectedOrder}/history`).then(r =>
+            (r.data as any[]).filter(m => !m.content?.startsWith('__'))
+          )
         : Promise.resolve([]),
     enabled: !!selectedOrder,
     refetchInterval: 10_000,
