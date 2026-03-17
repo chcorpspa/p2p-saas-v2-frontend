@@ -6,6 +6,7 @@ import { TrendingUp, DollarSign, Clock } from 'lucide-react';
 import { useSocket } from '@/lib/socket';
 import api from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -159,10 +160,25 @@ export default function PnLPage() {
   const totalNetNum = Number(summary?.totalNetUsdt ?? 0);
   const netColor = totalNetNum >= 0 ? 'text-green-400' : 'text-red-400';
 
+  async function exportCsv() {
+    const res = await api.get('/pnl/export/csv', { responseType: 'blob' });
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pnl-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Page title */}
-      <h1 className="text-2xl font-bold">P&amp;L — Ciclos de Trading</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">P&amp;L — Ciclos de Trading</h1>
+        <Button variant="outline" size="sm" onClick={exportCsv}>
+          ↓ Exportar CSV
+        </Button>
+      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

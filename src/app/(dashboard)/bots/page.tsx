@@ -426,6 +426,24 @@ export default function BotsPage() {
     onError: () => toast.error('Error al eliminar bot'),
   });
 
+  const startAll = useMutation({
+    mutationFn: () => api.post('/bots/start-all'),
+    onSuccess: (res) => {
+      toast.success(`${res.data.started} bots iniciados`);
+      qc.invalidateQueries({ queryKey: ['bots'] });
+    },
+    onError: () => toast.error('Error al iniciar todos los bots'),
+  });
+
+  const stopAll = useMutation({
+    mutationFn: () => api.post('/bots/stop-all'),
+    onSuccess: (res) => {
+      toast.success(`${res.data.stopped} bots detenidos`);
+      qc.invalidateQueries({ queryKey: ['bots'] });
+    },
+    onError: () => toast.error('Error al detener todos los bots'),
+  });
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center h-full">
@@ -438,8 +456,25 @@ export default function BotsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold">Bots</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">{bots.length} bots</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => startAll.mutate()}
+            disabled={startAll.isPending}
+          >
+            {startAll.isPending ? 'Iniciando...' : '▶ Iniciar todos'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => stopAll.mutate()}
+            disabled={stopAll.isPending}
+            className="text-destructive border-destructive/50 hover:bg-destructive/10"
+          >
+            {stopAll.isPending ? 'Deteniendo...' : '⏹ Detener todos'}
+          </Button>
           <Button
             size="sm"
             className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5"

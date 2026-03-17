@@ -7,6 +7,7 @@ import {
   ShieldCheck, Bell, LogOut, TrendingUp, Key, BellRing, Megaphone, Settings, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
+import { useNotifStore } from '@/store/notifications.store';
 
 const links = [
   { href: '/', label: 'Overview', icon: BarChart2 },
@@ -32,6 +33,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const router = useRouter();
   const tenant = useAuthStore((s) => s.tenant);
   const logout = useAuthStore((s) => s.logout);
+  const unreadOrders = useNotifStore(s => s.unreadOrders);
 
   function handleLogout() {
     logout();
@@ -94,6 +96,11 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {label}
+                {href === '/orders' && unreadOrders > 0 && (
+                  <span className="ml-auto bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                    {unreadOrders > 9 ? '9+' : unreadOrders}
+                  </span>
+                )}
               </Link>
             );
           })}
