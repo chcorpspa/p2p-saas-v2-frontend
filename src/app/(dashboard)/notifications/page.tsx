@@ -21,7 +21,7 @@ import { Bell, Send } from 'lucide-react';
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Account {
-  id: number;
+  id: string;
   label: string;
   isMerchant: boolean;
   isActive: boolean;
@@ -88,7 +88,7 @@ function ConfigSkeleton() {
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
 
-  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(defaultForm);
 
   // Fetch accounts list
@@ -102,7 +102,7 @@ export default function NotificationsPage() {
 
   // Set default selected account when accounts load
   useEffect(() => {
-    if (accounts.length > 0 && selectedAccountId === null) {
+    if (accounts.length > 0 && selectedAccountId === null && accounts[0]?.id) {
       setSelectedAccountId(accounts[0].id);
     }
   }, [accounts, selectedAccountId]);
@@ -141,7 +141,7 @@ export default function NotificationsPage() {
 
   // Reset form when account changes
   const handleAccountChange = (value: string) => {
-    setSelectedAccountId(Number(value));
+    setSelectedAccountId(value);
     setForm(defaultForm);
   };
 
@@ -230,7 +230,7 @@ export default function NotificationsPage() {
             Seleccionar cuenta:
           </Label>
           <Select
-            value={selectedAccountId?.toString() ?? ''}
+            value={selectedAccountId ?? ''}
             onValueChange={handleAccountChange}
           >
             <SelectTrigger className="w-full sm:w-72">
@@ -238,7 +238,7 @@ export default function NotificationsPage() {
             </SelectTrigger>
             <SelectContent>
               {accounts.map((account) => (
-                <SelectItem key={account.id} value={account.id.toString()}>
+                <SelectItem key={account.id} value={account.id}>
                   <span className="flex items-center gap-2">
                     {account.label}
                     {account.isMerchant && (
