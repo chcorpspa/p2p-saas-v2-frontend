@@ -19,9 +19,9 @@ export default function LoginPage() {
     setError('');
     try {
       const { data } = await api.post('/auth/login', { email, password });
-      setAuth(data.token, data.tenant);
-      localStorage.setItem('token', data.token);
-      document.cookie = `token=${data.token}; path=/; max-age=${7 * 24 * 3600}`;
+      setAuth(data.access_token, data.tenant);
+      localStorage.setItem('token', data.access_token);
+      document.cookie = `token=${data.access_token}; path=/; max-age=${7 * 24 * 3600}`;
       router.push('/');
     } catch (err: any) {
       setError(err.response?.data?.message ?? 'Login failed');
