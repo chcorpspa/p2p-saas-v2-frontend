@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSocket } from '@/lib/socket';
 import api from '@/lib/api';
+import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -125,9 +126,13 @@ function AdvNoCell({ advNo }: { advNo: string }) {
 function AdCard({
   bot,
   adStatus,
+  onToggle,
+  toggling,
 }: {
   bot: Bot;
   adStatus?: AdStatus;
+  onToggle?: (accountId: string, advNo: string) => void;
+  toggling?: boolean;
 }) {
   // tradeType: prefer live Binance data, fallback to nothing
   const tradeType = adStatus?.tradeType ?? null;
@@ -235,6 +240,21 @@ function AdCard({
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
+          {/* Toggle ad on/off */}
+          {onToggle && (
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(bot.account.id, bot.advNo); }}
+              disabled={toggling}
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded border transition-colors ${
+                advStatusInfo?.label === 'Publicado'
+                  ? 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                  : 'border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20'
+              }`}
+            >
+              {toggling ? '...' : advStatusInfo?.label === 'Publicado' ? 'Desactivar' : 'Activar'}
+            </button>
+          )}
+
           {/* Binance live status */}
           {advStatusInfo ? (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -262,6 +282,20 @@ export default function AdsPage() {
   const socket = useSocket();
   const [selectedAccount, setSelectedAccount] = useState<string>('all');
   const [_tick, setTick] = useState(0);
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  async function toggleAd(accountId: string, advNo: string) {
+    setToggling(advNo);
+    try {
+      await api.post(`/bots/accounts/${accountId}/ads/${advNo}/toggle`);
+      toast.success('Estado del anuncio actualizado');
+      qc.invalidateQueries({ queryKey: ['ad-statuses'] });
+    } catch {
+      toast.error('Error al cambiar estado del anuncio');
+    } finally {
+      setToggling(null);
+    }
+  }
 
   // Re-render every 10s to update relative timestamps
   useEffect(() => {
@@ -424,6 +458,8 @@ export default function AdsPage() {
               key={bot.id}
               bot={bot}
               adStatus={adStatuses[bot.advNo]}
+              onToggle={toggleAd}
+              toggling={toggling === bot.advNo}
             />
           ))}
         </div>

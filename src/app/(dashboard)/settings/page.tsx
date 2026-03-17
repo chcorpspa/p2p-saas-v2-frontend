@@ -314,6 +314,64 @@ function Disable2faModal({ onClose, onSuccess }: { onClose: () => void; onSucces
   );
 }
 
+// ─── Anti-Phishing Card ───────────────────────────────────────────────────────
+
+function AntiPhishingCard() {
+  const [code, setCode] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [currentCode, setCurrentCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get('/auth/anti-phishing').then(r => setCurrentCode(r.data.code ?? null)).catch(() => {});
+  }, []);
+
+  async function saveCode() {
+    if (!code.trim()) return;
+    setSaving(true);
+    try {
+      await api.put('/auth/anti-phishing', { code: code.trim() });
+      toast.success('Código anti-phishing guardado');
+      setCurrentCode(code.trim());
+      setCode('');
+    } catch {
+      toast.error('Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+      <div>
+        <h2 className="font-semibold flex items-center gap-2">
+          <Shield className="h-4 w-4 text-primary" />
+          Código Anti-Phishing
+        </h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Este código se mostrará en la barra superior para verificar que estás en el sitio legítimo.
+        </p>
+      </div>
+      {currentCode && (
+        <p className="text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+          ✓ Código configurado (se muestra en el header)
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Input
+          value={code}
+          onChange={e => setCode(e.target.value)}
+          placeholder="Tu código secreto (máx 20 caracteres)"
+          maxLength={20}
+          className="flex-1"
+        />
+        <Button size="sm" onClick={saveCode} disabled={saving || !code.trim()}>
+          {saving ? 'Guardando...' : 'Guardar'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -490,6 +548,9 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Anti-phishing code */}
+      <AntiPhishingCard />
 
       {/* Modals */}
       {showSetup2fa && (

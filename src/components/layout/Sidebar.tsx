@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
-  Bot, BarChart2, MessageSquare, List, Users,
+  Bot, BarChart2, MessageSquare, List, Users, UserX,
   ShieldCheck, Bell, LogOut, TrendingUp, Key, BellRing, Megaphone, Settings, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
@@ -23,6 +23,7 @@ const mainLinks = [
 const settingsLinks = [
   { href: '/accounts',      label: 'Cuentas',        icon: Key },
   { href: '/operators',     label: 'Operadores',     icon: Users },
+  { href: '/clients',       label: 'Clientes',       icon: UserX },
   { href: '/auto-messages', label: 'Auto-mensajes',  icon: Bell },
   { href: '/notifications', label: 'Notificaciones', icon: BellRing },
   { href: '/settings',      label: 'Configuración',  icon: Settings },
