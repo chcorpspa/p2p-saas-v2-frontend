@@ -1,9 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import api from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuthStore } from '@/store/auth.store';
 import { useRouter } from 'next/navigation';
 
@@ -101,20 +100,16 @@ export default function AdminPage() {
                   {t.isAdmin && <span className="text-xs text-yellow-500">admin</span>}
                 </td>
                 <td className="p-3">
-                  <Select
+                  <select
                     value={t.plan}
-                    onValueChange={(val) => updatePlan(t.id, val)}
+                    onChange={(e) => updatePlan(t.id, e.target.value)}
                     disabled={saving === t.id}
+                    className="border rounded px-2 py-1 text-sm bg-background"
                   >
-                    <SelectTrigger className="w-32 h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PLANS.map((p) => (
-                        <SelectItem key={p} value={p}>{p}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    {PLANS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
                 </td>
                 <td className="p-3">
                   <Badge variant={t.isActive ? 'default' : 'destructive'}>
