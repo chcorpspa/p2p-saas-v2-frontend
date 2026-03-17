@@ -16,6 +16,7 @@ interface Bot {
   config: Record<string, unknown> | null;
   lastError?: string;
   account: { id: string; label: string };
+  currentPrice?: number | null;
 }
 
 interface PriceTick { price: number; createdAt: string; }
@@ -81,6 +82,7 @@ export default function BotConfigPage() {
   const [riskProfile, setRiskProfile] = useState('');
   const [configJson, setConfigJson] = useState('');
   const [jsonError, setJsonError] = useState('');
+  const [manualPrice, setManualPrice] = useState('');
 
   // Initialize form from bot data
   useEffect(() => {
@@ -119,6 +121,17 @@ export default function BotConfigPage() {
       qc.invalidateQueries({ queryKey: ['bots'] });
     },
     onError: () => toast.error('Error al cambiar estado del bot'),
+  });
+
+  const updatePrice = useMutation({
+    mutationFn: (price: number) => api.post(`/bots/${botId}/update-price`, { price }),
+    onSuccess: (res) => {
+      toast.success(`Precio actualizado a ${res.data.price} VES`);
+      qc.invalidateQueries({ queryKey: ['bots', botId] });
+      qc.invalidateQueries({ queryKey: ['bots', botId, 'price-history', 100] });
+      setManualPrice('');
+    },
+    onError: () => toast.error('Error al actualizar precio'),
   });
 
   const validateJson = (value: string) => {
@@ -208,6 +221,37 @@ export default function BotConfigPage() {
             variant={isRunning ? 'destructive' : 'secondary'}
           >
             {toggleBot.isPending ? 'Procesando...' : isRunning ? '■ Stop' : '▶ Start'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Manual price update */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3 mb-6">
+        <h3 className="font-semibold">Precio manual</h3>
+        <p className="text-sm text-muted-foreground">
+          Precio actual:{' '}
+          <span className="text-foreground font-mono">
+            {history.length > 0
+              ? Number(history[history.length - 1].price).toLocaleString('es-VE', { minimumFractionDigits: 2 })
+              : '—'}{' '}
+            VES
+          </span>
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            step="0.01"
+            value={manualPrice}
+            onChange={e => setManualPrice(e.target.value)}
+            placeholder="649.59"
+            className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <Button
+            onClick={() => manualPrice && updatePrice.mutate(parseFloat(manualPrice))}
+            disabled={!manualPrice || updatePrice.isPending}
+            size="sm"
+          >
+            {updatePrice.isPending ? 'Aplicando...' : 'Aplicar'}
           </Button>
         </div>
       </div>
