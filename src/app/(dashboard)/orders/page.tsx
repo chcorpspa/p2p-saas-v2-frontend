@@ -287,6 +287,29 @@ export default function OrdersPage() {
           {accounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
         </select>
 
+        {/* Export CSV */}
+        <button
+          onClick={() => {
+            const link = document.createElement('a');
+            link.href = `/api/orders/export/csv`;
+            link.setAttribute('download', 'orders.csv');
+            const token = localStorage.getItem('token');
+            fetch('/api/orders/export/csv', { headers: { Authorization: `Bearer ${token}` } })
+              .then(r => r.blob())
+              .then(blob => {
+                const url = URL.createObjectURL(blob);
+                link.href = url;
+                link.click();
+                URL.revokeObjectURL(url);
+              })
+              .catch(() => toast.error('Error al exportar'));
+          }}
+          className="px-2 py-1 text-xs rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-white/5"
+          title="Exportar CSV"
+        >
+          CSV ↓
+        </button>
+
         <div className="flex gap-1 ml-auto">
           <button
             onClick={() => setTab('active')}
