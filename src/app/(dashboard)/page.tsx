@@ -80,19 +80,19 @@ interface StatCardProps {
   valueColor?: string;
 }
 
-function StatCard({ label, value, subtitle, icon, iconBg, valueColor }: StatCardProps) {
+function StatCard({ label, value, subtitle, icon, iconBg, valueColor, accentClass }: StatCardProps & { accentClass?: string }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-5 flex items-start justify-between gap-4">
+    <div className={`bg-card border border-border rounded-xl p-5 flex items-start justify-between gap-4 card-hover overflow-hidden relative ${accentClass ?? ''}`}>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-muted-foreground font-medium mb-1">{label}</p>
-        <p className={`text-3xl font-bold leading-tight ${valueColor ?? 'text-foreground'}`}>
+        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-2">{label}</p>
+        <p className={`text-2xl font-bold leading-tight tracking-tight ${valueColor ?? 'text-foreground'}`}>
           {value}
         </p>
         {subtitle && (
-          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+          <p className="text-xs text-muted-foreground mt-1.5">{subtitle}</p>
         )}
       </div>
-      <div className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center ${iconBg}`}>
+      <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
         {icon}
       </div>
     </div>
@@ -247,9 +247,10 @@ export default function OverviewPage() {
             label="Bots Activos"
             value={`${runningBots} / ${totalBots}`}
             subtitle={totalBots === 0 ? 'Sin bots configurados' : `${totalBots - runningBots} detenidos`}
-            icon={<Activity className="w-5 h-5 text-green-400" />}
+            icon={<Activity className="w-4.5 h-4.5 text-green-400" />}
             iconBg="bg-green-500/15"
             valueColor={runningBots > 0 ? 'text-green-400' : 'text-foreground'}
+            accentClass="stat-card-green"
           />
 
           {/* Cuentas */}
@@ -261,17 +262,19 @@ export default function OverviewPage() {
                 ? `${accounts.length - activeAccounts} inactivas`
                 : 'Cargando…'
             }
-            icon={<Key className="w-5 h-5 text-primary" />}
+            icon={<Key className="w-4.5 h-4.5 text-primary" />}
             iconBg="bg-primary/15"
+            accentClass="stat-card-yellow"
           />
 
           {/* Ciclos P&L */}
           <StatCard
-            label="Ciclos P&L"
+            label="Ciclos Cerrados"
             value={closedCycles}
-            subtitle="Ciclos cerrados"
-            icon={<TrendingUp className="w-5 h-5 text-blue-400" />}
+            subtitle="Ciclos completados"
+            icon={<TrendingUp className="w-4.5 h-4.5 text-blue-400" />}
             iconBg="bg-blue-500/15"
+            accentClass="stat-card-blue"
           />
 
           {/* Ganancia Neta */}
@@ -279,7 +282,7 @@ export default function OverviewPage() {
             label="Ganancia Neta"
             value={`${formatUsdt(totalNet)} USDT`}
             subtitle={totalNet ? (netPositive ? 'Ganancia acumulada' : 'Pérdida acumulada') : 'Sin datos'}
-            icon={<DollarSign className="w-5 h-5 text-amber-400" />}
+            icon={<DollarSign className="w-4.5 h-4.5 text-amber-400" />}
             iconBg="bg-amber-500/15"
             valueColor={
               netPositive
@@ -288,6 +291,7 @@ export default function OverviewPage() {
                 ? 'text-red-400'
                 : 'text-foreground'
             }
+            accentClass="stat-card-amber"
           />
         </div>
       )}

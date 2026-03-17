@@ -31,16 +31,26 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <main className="flex-1 overflow-auto relative">
-        {/* Mobile hamburger */}
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="fixed top-4 left-4 z-30 md:hidden p-2 rounded-md bg-card border border-border text-muted-foreground hover:text-foreground"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-        {children}
-      </main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Mobile top bar */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border md:hidden shrink-0">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center">
+              <span className="text-primary-foreground font-bold text-[9px]">P2</span>
+            </div>
+            <span className="font-semibold text-sm">P2P Bot</span>
+          </div>
+        </div>
+        <main className="flex-1 overflow-auto">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

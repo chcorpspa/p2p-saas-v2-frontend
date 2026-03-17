@@ -5,22 +5,28 @@ import { cn } from '@/lib/utils';
 import {
   Bot, BarChart2, MessageSquare, List, Users,
   ShieldCheck, Bell, LogOut, TrendingUp, Key, BellRing, Megaphone, Settings, X,
+  Zap,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useNotifStore } from '@/store/notifications.store';
 
-const links = [
-  { href: '/', label: 'Overview', icon: BarChart2 },
-  { href: '/bots', label: 'Bots', icon: Bot },
-  { href: '/orders', label: 'Órdenes', icon: List },
-  { href: '/ads', label: 'Anuncios', icon: Megaphone },
-  { href: '/pnl', label: 'P&L', icon: TrendingUp },
-  { href: '/accounts', label: 'Cuentas', icon: Key },
-  { href: '/operators', label: 'Operadores', icon: Users },
-  { href: '/auto-messages', label: 'Auto-mensajes', icon: Bell },
+// ─── Navigation groups ─────────────────────────────────────────────────────
+
+const mainLinks = [
+  { href: '/',              label: 'Panel',          icon: BarChart2 },
+  { href: '/bots',          label: 'Bots',           icon: Bot },
+  { href: '/orders',        label: 'Órdenes',        icon: List },
+  { href: '/ads',           label: 'Anuncios',       icon: Megaphone },
+  { href: '/chat',          label: 'Chat',           icon: MessageSquare },
+  { href: '/pnl',           label: 'P&L',            icon: TrendingUp },
+];
+
+const settingsLinks = [
+  { href: '/accounts',      label: 'Cuentas',        icon: Key },
+  { href: '/operators',     label: 'Operadores',     icon: Users },
+  { href: '/auto-messages', label: 'Auto-mensajes',  icon: Bell },
   { href: '/notifications', label: 'Notificaciones', icon: BellRing },
-  { href: '/chat', label: 'Chat', icon: MessageSquare },
-  { href: '/settings', label: 'Configuración', icon: Settings },
+  { href: '/settings',      label: 'Configuración',  icon: Settings },
 ];
 
 interface SidebarProps {
@@ -28,11 +34,64 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
+// ─── Nav item ──────────────────────────────────────────────────────────────
+
+function NavItem({
+  href,
+  label,
+  icon: Icon,
+  active,
+  badge,
+  className,
+  onClick,
+}: {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  active: boolean;
+  badge?: number;
+  className?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className={cn(
+        'group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 relative',
+        active
+          ? 'bg-primary/12 text-primary'
+          : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+        className,
+      )}
+    >
+      {/* Active indicator bar */}
+      {active && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
+      )}
+      <Icon
+        className={cn(
+          'h-4 w-4 shrink-0 transition-colors',
+          active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
+        )}
+      />
+      <span className="flex-1">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="ml-auto bg-primary text-primary-foreground text-[10px] leading-none rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold px-1">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+// ─── Sidebar ───────────────────────────────────────────────────────────────
+
 export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const tenant = useAuthStore((s) => s.tenant);
-  const logout = useAuthStore((s) => s.logout);
+  const pathname    = usePathname();
+  const router      = useRouter();
+  const tenant      = useAuthStore((s) => s.tenant);
+  const logout      = useAuthStore((s) => s.logout);
   const unreadOrders = useNotifStore(s => s.unreadOrders);
 
   function handleLogout() {
@@ -40,96 +99,133 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     router.push('/login');
   }
 
+  function isActive(href: string) {
+    return href === '/' ? pathname === '/' : pathname.startsWith(href);
+  }
+
+  // Abbreviation for avatar
+  const initials = tenant?.email?.slice(0, 2).toUpperCase() ?? 'P2';
+
   return (
     <>
-      {/* Mobile overlay backdrop */}
+      {/* Mobile overlay */}
       {onClose && (
         <div
-          className={`fixed inset-0 z-40 bg-black/60 md:hidden transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          className={cn(
+            'fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden transition-opacity duration-200',
+            isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
+          )}
           onClick={onClose}
         />
       )}
 
-      {/* Sidebar */}
-      <aside className={`
-        fixed md:static inset-y-0 left-0 z-50
-        w-[220px] shrink-0 border-r border-border bg-sidebar flex flex-col h-full
-        transition-transform duration-200
-        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0
-      `}>
-        {/* Close button (mobile only) */}
+      {/* Sidebar panel */}
+      <aside
+        className={cn(
+          'fixed md:static inset-y-0 left-0 z-50',
+          'w-[220px] shrink-0 flex flex-col h-full',
+          'bg-sidebar border-r border-sidebar-border',
+          'transition-transform duration-200',
+          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+        )}
+      >
+        {/* Mobile close */}
         {onClose && (
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 md:hidden text-muted-foreground hover:text-foreground"
+            className="absolute top-4 right-4 md:hidden text-muted-foreground hover:text-foreground transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         )}
 
-        {/* Logo */}
-        <div className="px-4 py-5 border-b border-border">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">P</span>
+        {/* ── Logo ─────────────────────────────────── */}
+        <div className="px-4 py-4 border-b border-sidebar-border">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
+              <Zap className="h-4 w-4 text-primary-foreground" fill="currentColor" />
             </div>
-            <span className="font-bold text-foreground tracking-tight">P2P Bot</span>
+            <div>
+              <p className="font-bold text-sm text-foreground leading-none tracking-tight">P2P Bot</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-none">SaaS v2</p>
+            </div>
           </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-          {links.map(({ href, label, icon: Icon }) => {
-            const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => onClose?.()}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                  active
-                    ? 'text-primary font-medium bg-primary/10 border-l-2 border-primary pl-[10px]'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {label}
-                {href === '/orders' && unreadOrders > 0 && (
-                  <span className="ml-auto bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                    {unreadOrders > 9 ? '9+' : unreadOrders}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+        {/* ── Navigation ───────────────────────────── */}
+        <nav className="flex-1 overflow-y-auto px-2.5 py-3 space-y-0.5">
 
+          {/* Main group */}
+          <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 select-none">
+            Principal
+          </p>
+          {mainLinks.map(({ href, label, icon }) => (
+            <NavItem
+              key={href}
+              href={href}
+              label={label}
+              icon={icon}
+              active={isActive(href)}
+              badge={href === '/orders' ? unreadOrders : undefined}
+              onClick={onClose}
+            />
+          ))}
+
+          {/* Settings group */}
+          <p className="px-3 mt-4 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 select-none">
+            Configuración
+          </p>
+          {settingsLinks.map(({ href, label, icon }) => (
+            <NavItem
+              key={href}
+              href={href}
+              label={label}
+              icon={icon}
+              active={isActive(href)}
+              onClick={onClose}
+            />
+          ))}
+
+          {/* Admin */}
           {tenant?.isAdmin && (
-            <Link
-              href="/admin"
-              onClick={() => onClose?.()}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors mt-2',
-                pathname === '/admin'
-                  ? 'text-primary font-medium bg-primary/10 border-l-2 border-primary pl-[10px]'
-                  : 'text-yellow-500/80 hover:text-yellow-500 hover:bg-accent/50',
-              )}
-            >
-              <ShieldCheck className="h-4 w-4 shrink-0" />
-              Admin
-            </Link>
+            <>
+              <p className="px-3 mt-4 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 select-none">
+                Sistema
+              </p>
+              <NavItem
+                href="/admin"
+                label="Admin"
+                icon={ShieldCheck}
+                active={isActive('/admin')}
+                onClick={onClose}
+                className={isActive('/admin') ? '' : 'text-yellow-500/70 hover:text-yellow-500'}
+              />
+            </>
           )}
         </nav>
 
-        {/* Footer */}
-        <div className="px-3 py-3 border-t border-border">
-          <p className="text-xs text-muted-foreground truncate mb-2 px-1">{tenant?.email}</p>
+        {/* ── Footer ───────────────────────────────── */}
+        <div className="border-t border-sidebar-border px-3 py-3">
+          {/* User info */}
+          <div className="flex items-center gap-2.5 px-1 mb-2">
+            <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
+              <span className="text-[10px] font-bold text-primary">{initials}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-foreground font-medium truncate leading-none">
+                {tenant?.email?.split('@')[0] ?? 'Usuario'}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-none capitalize">
+                {tenant?.plan ?? 'free'}
+              </p>
+            </div>
+          </div>
+
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/8 transition-all duration-150"
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-3.5 w-3.5" />
             Cerrar sesión
           </button>
         </div>
