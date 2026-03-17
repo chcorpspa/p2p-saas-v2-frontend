@@ -431,6 +431,60 @@ export default function NotificationsPage() {
                       }
                     />
                   </div>
+                  {/* Appeal */}
+                  <div className="flex items-center justify-between py-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="notify-appeal" className="text-sm font-medium cursor-pointer">Apelación abierta</Label>
+                      <p className="text-xs text-muted-foreground">Alerta cuando se abre una apelación</p>
+                    </div>
+                    <Switch
+                      id="notify-appeal"
+                      checked={(form as any).notifyAppeal ?? true}
+                      onCheckedChange={(checked: boolean) => setForm((prev) => ({ ...prev, notifyAppeal: checked }))}
+                    />
+                  </div>
+                  {/* KYC */}
+                  <div className="flex items-center justify-between py-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="notify-kyc" className="text-sm font-medium cursor-pointer">Verificación KYC</Label>
+                      <p className="text-xs text-muted-foreground">Alerta cuando se solicita KYC adicional</p>
+                    </div>
+                    <Switch
+                      id="notify-kyc"
+                      checked={(form as any).notifyKyc ?? false}
+                      onCheckedChange={(checked: boolean) => setForm((prev) => ({ ...prev, notifyKyc: checked }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Proactive alerts */}
+              <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+                <h3 className="text-sm font-semibold">Alertas proactivas</h3>
+                <p className="text-xs text-muted-foreground">Alertas automáticas por eventos del sistema</p>
+                <div className="divide-y divide-border">
+                  <div className="flex items-center justify-between py-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="alert-error" className="text-sm font-medium cursor-pointer">Error en bot</Label>
+                      <p className="text-xs text-muted-foreground">Alerta cuando un bot encuentra un error</p>
+                    </div>
+                    <Switch
+                      id="alert-error"
+                      checked={(form as any).alertBotError ?? true}
+                      onCheckedChange={(checked: boolean) => setForm((prev) => ({ ...prev, alertBotError: checked }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between py-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="alert-large" className="text-sm font-medium cursor-pointer">Orden grande</Label>
+                      <p className="text-xs text-muted-foreground">Alerta cuando una orden supera el monto configurado</p>
+                    </div>
+                    <Switch
+                      id="alert-large"
+                      checked={(form as any).alertLargeOrder ?? false}
+                      onCheckedChange={(checked: boolean) => setForm((prev) => ({ ...prev, alertLargeOrder: checked }))}
+                    />
+                  </div>
                 </div>
               </div>
 

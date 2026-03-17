@@ -23,6 +23,7 @@ interface Stats {
 }
 
 const PLANS = ['TRIAL', 'BASIC', 'PRO', 'ENTERPRISE'];
+const PLAN_DURATIONS: Record<string, number> = { TRIAL: 7, BASIC: 30, PRO: 30, ENTERPRISE: 90 };
 
 export default function AdminPage() {
   const tenant = useAuthStore((s) => s.tenant);

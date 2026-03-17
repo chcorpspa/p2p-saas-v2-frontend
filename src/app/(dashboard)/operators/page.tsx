@@ -12,9 +12,35 @@ interface Operator {
   name: string;
   advNos: string[];
   isActive: boolean;
+  role?: string;
+  permissions?: string[];
+  pnlAccess?: boolean;
 }
 
-const DEFAULT_FORM = { name: '', advNos: '', isActive: true };
+type Role = 'operator' | 'admin' | 'viewer';
+const ROLES: { value: Role; label: string; desc: string }[] = [
+  { value: 'operator', label: 'Operador', desc: 'Acceso a órdenes y chat según anuncios asignados' },
+  { value: 'admin', label: 'Admin', desc: 'Acceso completo excepto configuración de cuenta' },
+  { value: 'viewer', label: 'Visor', desc: 'Solo lectura — no puede ejecutar acciones' },
+];
+
+const PERMISSIONS = [
+  { key: 'view_orders', label: 'Ver órdenes' },
+  { key: 'send_chat', label: 'Enviar chat' },
+  { key: 'mark_paid', label: 'Marcar pagado' },
+  { key: 'release', label: 'Liberar cripto' },
+  { key: 'cancel', label: 'Cancelar orden' },
+  { key: 'manage_ads', label: 'Gestionar anuncios' },
+];
+
+const DEFAULT_FORM = {
+  name: '',
+  advNos: '',
+  isActive: true,
+  role: 'operator' as Role,
+  permissions: ['view_orders', 'send_chat', 'mark_paid', 'release'] as string[],
+  pnlAccess: false,
+};
 
 export default function OperatorsPage() {
   const qc = useQueryClient();
@@ -34,6 +60,9 @@ export default function OperatorsPage() {
       name: form.name,
       advNos: form.advNos.split(',').map((s: string) => s.trim()).filter(Boolean),
       isActive: form.isActive,
+      role: form.role,
+      permissions: form.permissions,
+      pnlAccess: form.pnlAccess,
     }),
     onSuccess: () => { toast.success('Operador creado'); qc.invalidateQueries({ queryKey: ['operators'] }); closeModal(); },
     onError: () => toast.error('Error al crear'),
@@ -44,6 +73,9 @@ export default function OperatorsPage() {
       name: form.name,
       advNos: form.advNos.split(',').map((s: string) => s.trim()).filter(Boolean),
       isActive: form.isActive,
+      role: form.role,
+      permissions: form.permissions,
+      pnlAccess: form.pnlAccess,
     }),
     onSuccess: () => { toast.success('Actualizado'); qc.invalidateQueries({ queryKey: ['operators'] }); closeModal(); },
     onError: () => toast.error('Error al actualizar'),
@@ -64,7 +96,14 @@ export default function OperatorsPage() {
   const openCreate = () => { setEditId(null); setForm(DEFAULT_FORM); setShowModal(true); };
   const openEdit = (op: Operator) => {
     setEditId(op.id);
-    setForm({ name: op.name, advNos: op.advNos.join(', '), isActive: op.isActive });
+    setForm({
+      name: op.name,
+      advNos: op.advNos.join(', '),
+      isActive: op.isActive,
+      role: (op.role as Role) || 'operator',
+      permissions: op.permissions || ['view_orders', 'send_chat', 'mark_paid', 'release'],
+      pnlAccess: op.pnlAccess || false,
+    });
     setShowModal(true);
   };
   const closeModal = () => { setShowModal(false); setEditId(null); };
@@ -245,6 +284,54 @@ export default function OperatorsPage() {
                   className={`relative w-11 h-6 rounded-full transition-colors ${form.isActive ? 'bg-primary' : 'bg-white/10'}`}
                 >
                   <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${form.isActive ? 'left-6' : 'left-1'}`} />
+                </button>
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5">Rol</label>
+                <select
+                  value={form.role}
+                  onChange={e => setForm(f => ({ ...f, role: e.target.value as Role }))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
+                >
+                  {ROLES.map(r => (
+                    <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Permissions */}
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5">Permisos</label>
+                <div className="space-y-1.5">
+                  {PERMISSIONS.map(p => (
+                    <label key={p.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.permissions.includes(p.key)}
+                        onChange={() => setForm(f => ({
+                          ...f,
+                          permissions: f.permissions.includes(p.key)
+                            ? f.permissions.filter(x => x !== p.key)
+                            : [...f.permissions, p.key],
+                        }))}
+                        className="accent-primary w-3.5 h-3.5"
+                      />
+                      <span className="text-foreground">{p.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* P&L access */}
+              <div className="flex items-center justify-between py-1">
+                <span className="text-sm text-foreground">Acceso a P&L</span>
+                <button
+                  onClick={() => setForm(f => ({ ...f, pnlAccess: !f.pnlAccess }))}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${form.pnlAccess ? 'bg-primary' : 'bg-white/10'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${form.pnlAccess ? 'left-6' : 'left-1'}`} />
                 </button>
               </div>
             </div>
