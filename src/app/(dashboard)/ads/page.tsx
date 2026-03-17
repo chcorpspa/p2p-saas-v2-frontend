@@ -5,8 +5,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSocket } from '@/lib/socket';
 import api from '@/lib/api';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,11 +25,20 @@ interface Bot {
   account: { id: string; label: string };
 }
 
+interface AdStatus {
+  advStatus: number;
+  tradeType: string;
+  price?: string;
+  surplusAmount?: string;
+  minAmount?: string;
+  maxAmount?: string;
+}
+
 // advStatus from Binance: 1=Online, 3=Offline, 4=Closed
-const ADV_STATUS: Record<number, { label: string; color: string }> = {
-  1: { label: 'Publicado',  color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
-  3: { label: 'Offline',    color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
-  4: { label: 'Cerrado',    color: 'text-red-400 bg-red-500/10 border-red-500/30' },
+const ADV_STATUS: Record<number, { label: string; dot: string }> = {
+  1: { label: 'Publicado', dot: 'bg-emerald-400' },
+  3: { label: 'Offline',   dot: 'bg-amber-400' },
+  4: { label: 'Cerrado',   dot: 'bg-red-400' },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,38 +58,21 @@ function fmt(n: number) {
   });
 }
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
+// ─── Bot Status Badge ─────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === 'RUNNING') {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs bg-green-500/20 text-green-400 border border-green-500/30">
-        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
-        Activo
-      </span>
-    );
-  }
-  if (status === 'ERROR') {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs bg-red-500/20 text-red-400 border border-red-500/30">
-        <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-        Error
-      </span>
-    );
-  }
-  if (status === 'PAUSED') {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30">
-        <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-        Pausado
-      </span>
-    );
-  }
-  // STOPPED (default)
+  const map: Record<string, { label: string; cls: string; pulse?: boolean }> = {
+    RUNNING: { label: 'Activo',   cls: 'bg-green-500/20 text-green-400 border-green-500/30',  pulse: true },
+    ERROR:   { label: 'Error',    cls: 'bg-red-500/20 text-red-400 border-red-500/30' },
+    PAUSED:  { label: 'Pausado',  cls: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+    STOPPED: { label: 'Detenido', cls: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
+  };
+  const { label, cls, pulse } = map[status] ?? map['STOPPED'];
+  const dotColor = status === 'RUNNING' ? 'bg-green-500' : status === 'ERROR' ? 'bg-red-500' : status === 'PAUSED' ? 'bg-amber-500' : 'bg-gray-500';
   return (
-    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs bg-gray-500/20 text-gray-400 border border-gray-500/30">
-      <span className="w-2 h-2 rounded-full bg-gray-500 inline-block" />
-      Detenido
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs border ${cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full inline-block ${dotColor} ${pulse ? 'animate-pulse' : ''}`} />
+      {label}
     </span>
   );
 }
@@ -91,24 +81,25 @@ function StatusBadge({ status }: { status: string }) {
 
 function ModeBadge({ mode }: { mode: string }) {
   const styles: Record<string, string> = {
-    DYNAMIC: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
-    FIXED: 'bg-gray-500/20 text-gray-400 border border-gray-500/30',
-    SPREAD: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
+    DYNAMIC: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    FIXED:   'bg-gray-500/20 text-gray-400 border-gray-500/30',
+    SPREAD:  'bg-purple-500/20 text-purple-400 border-purple-500/30',
   };
-  const style = styles[mode] ?? styles['FIXED'];
+  const cls = styles[mode] ?? styles['FIXED'];
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs ${style}`}>
+    <span className={`px-2 py-0.5 rounded-full text-xs border ${cls}`}>
       {mode}
     </span>
   );
 }
 
-// ─── AdvNo Cell (copyable) ────────────────────────────────────────────────────
+// ─── AdvNo copyable ───────────────────────────────────────────────────────────
 
 function AdvNoCell({ advNo }: { advNo: string }) {
   const [copied, setCopied] = useState(false);
 
-  function handleCopy() {
+  function handleCopy(e: React.MouseEvent) {
+    e.preventDefault();
     navigator.clipboard.writeText(advNo).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
@@ -119,17 +110,148 @@ function AdvNoCell({ advNo }: { advNo: string }) {
     <button
       onClick={handleCopy}
       title="Copiar advNo"
-      className="font-mono text-sm text-foreground hover:text-primary transition-colors relative group"
+      className="font-mono text-xs text-muted-foreground hover:text-foreground transition-colors group flex items-center gap-1.5"
     >
-      {advNo}
-      <span
-        className={`ml-2 text-xs text-green-400 transition-opacity duration-200 ${
-          copied ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'
-        }`}
-      >
-        {copied ? 'Copiado!' : 'Copiar'}
+      <span className="truncate max-w-[130px]">{advNo}</span>
+      <span className={`text-xs transition-opacity duration-200 ${copied ? 'text-green-400 opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-60'}`}>
+        {copied ? '✓' : '⎘'}
       </span>
     </button>
+  );
+}
+
+// ─── Ad Card ──────────────────────────────────────────────────────────────────
+
+function AdCard({
+  bot,
+  adStatus,
+}: {
+  bot: Bot;
+  adStatus?: AdStatus;
+}) {
+  // tradeType: prefer live Binance data, fallback to nothing
+  const tradeType = adStatus?.tradeType ?? null;
+  const isSell = tradeType === 'SELL';
+  const isBuy  = tradeType === 'BUY';
+
+  // Border accent: red=SELL (Venta), green=BUY (Compra), neutral=unknown
+  const borderAccent = isSell
+    ? 'border-l-red-500'
+    : isBuy
+    ? 'border-l-emerald-500'
+    : 'border-l-border';
+
+  // Trade type pill
+  const tradePill = isSell ? (
+    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
+      VENTA
+    </span>
+  ) : isBuy ? (
+    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+      COMPRA
+    </span>
+  ) : null;
+
+  // Price: prefer live currentPrice from bot tick, fallback to adStatus.price
+  const displayPrice = bot.currentPrice != null
+    ? fmt(bot.currentPrice)
+    : adStatus?.price
+    ? Number(adStatus.price).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : null;
+
+  // Binance ad status
+  const advStatusInfo = adStatus ? ADV_STATUS[adStatus.advStatus] : null;
+
+  // Amounts from Binance
+  const surplus  = adStatus?.surplusAmount  ? parseFloat(adStatus.surplusAmount).toFixed(2)  : null;
+  const minAmt   = adStatus?.minAmount      ? parseFloat(adStatus.minAmount).toFixed(2)       : null;
+  const maxAmt   = adStatus?.maxAmount      ? parseFloat(adStatus.maxAmount).toFixed(2)       : null;
+
+  return (
+    <Link
+      href={`/bots/${bot.id}`}
+      className={`
+        block bg-card border border-border border-l-4 ${borderAccent}
+        rounded-xl overflow-hidden
+        hover:bg-muted/20 hover:shadow-lg hover:shadow-black/20
+        transition-all duration-200 group
+      `}
+    >
+      {/* Card header */}
+      <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-1.5 min-w-0">
+          {/* Account */}
+          <span className="text-xs text-muted-foreground font-medium truncate">
+            {bot.account.label}
+          </span>
+          {/* advNo */}
+          <AdvNoCell advNo={bot.advNo} />
+        </div>
+
+        {/* Trade type pill */}
+        <div className="flex-shrink-0">
+          {tradePill}
+        </div>
+      </div>
+
+      {/* Price — main metric */}
+      <div className="px-4 pb-3">
+        {displayPrice ? (
+          <div className="flex items-baseline gap-1.5">
+            <span className={`text-2xl font-bold tracking-tight ${isSell ? 'text-red-400' : isBuy ? 'text-emerald-400' : 'text-primary'}`}>
+              {displayPrice}
+            </span>
+            <span className="text-xs text-muted-foreground font-medium">VES/USDT</span>
+          </div>
+        ) : (
+          <span className="text-2xl font-bold text-muted-foreground/40">—</span>
+        )}
+      </div>
+
+      {/* Amounts row */}
+      {(surplus !== null || minAmt !== null) && (
+        <div className="px-4 pb-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          {surplus !== null && (
+            <span>
+              Disponible: <span className="text-foreground font-medium">{surplus} USDT</span>
+            </span>
+          )}
+          {minAmt !== null && maxAmt !== null && (
+            <span>
+              Límites: <span className="text-foreground font-medium">{minAmt}–{maxAmt} USD</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Divider */}
+      <div className="border-t border-border/50 mx-4" />
+
+      {/* Footer */}
+      <div className="px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <StatusBadge status={bot.status} />
+          <ModeBadge mode={bot.mode} />
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto">
+          {/* Binance live status */}
+          {advStatusInfo ? (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span className={`w-1.5 h-1.5 rounded-full inline-block ${advStatusInfo.dot}`} />
+              {advStatusInfo.label}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+
+          {/* Last tick */}
+          <span className="text-xs text-muted-foreground/60 hidden sm:block">
+            {relativeTime(bot.lastTickAt)}
+          </span>
+        </div>
+      </div>
+    </Link>
   );
 }
 
@@ -161,18 +283,18 @@ export default function AdsPage() {
   });
 
   // Fetch real Binance ad statuses (all accounts, merged)
-  const { data: adStatuses = {} } = useQuery<Record<string, number>>({
+  const { data: adStatuses = {} } = useQuery<Record<string, AdStatus>>({
     queryKey: ['ad-statuses'],
     queryFn: async () => {
       const accountIds = [...new Set(bots.map(b => b.account.id))];
       const results = await Promise.all(
         accountIds.map(id =>
-          api.get<Record<string, number>>(`/bots/accounts/${id}/ad-statuses`)
+          api.get<Record<string, AdStatus>>(`/bots/accounts/${id}/ad-statuses`)
             .then(r => r.data)
-            .catch(() => ({} as Record<string, number>))
+            .catch(() => ({} as Record<string, AdStatus>))
         )
       );
-      return results.reduce((acc, r) => ({ ...acc, ...r }), {} as Record<string, number>);
+      return results.reduce((acc, r) => ({ ...acc, ...r }), {} as Record<string, AdStatus>);
     },
     enabled: bots.length > 0,
     refetchInterval: 60000,
@@ -216,63 +338,79 @@ export default function AdsPage() {
       : bots.filter(b => b.account.id === selectedAccount);
 
   const runningCount = filteredBots.filter(b => b.status === 'RUNNING').length;
+  const sellCount    = filteredBots.filter(b => adStatuses[b.advNo]?.tradeType === 'SELL').length;
+  const buyCount     = filteredBots.filter(b => adStatuses[b.advNo]?.tradeType === 'BUY').length;
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Anuncios P2P</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Anuncios configurados en Binance P2P
+            Anuncios activos en Binance P2P
           </p>
         </div>
         <Link href="/bots">
-          <Button variant="outline" size="sm">
+          <button className="text-sm text-muted-foreground hover:text-foreground transition-colors border border-border rounded-lg px-3 py-1.5">
             Ir a Bots →
-          </Button>
+          </button>
         </Link>
       </div>
 
-      {/* Account selector */}
-      <div className="flex items-center gap-3">
-        <label className="text-sm text-muted-foreground whitespace-nowrap">
-          Cuenta:
-        </label>
-        <select
-          value={selectedAccount}
-          onChange={e => setSelectedAccount(e.target.value)}
-          className="bg-card border border-border rounded-md px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-        >
-          <option value="all">Todas las cuentas</option>
-          {accounts.map(acc => (
-            <option key={acc.id} value={acc.id}>
-              {acc.label}
-            </option>
-          ))}
-        </select>
+      {/* Account selector + summary */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground whitespace-nowrap">Cuenta:</label>
+          <select
+            value={selectedAccount}
+            onChange={e => setSelectedAccount(e.target.value)}
+            className="bg-card border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="all">Todas las cuentas</option>
+            {accounts.map(acc => (
+              <option key={acc.id} value={acc.id}>
+                {acc.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {!isLoading && filteredBots.length > 0 && (
+          <div className="flex items-center gap-3 text-sm">
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+              <span className="text-foreground font-medium">{runningCount}</span> activos
+            </span>
+            {sellCount > 0 && (
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />
+                <span className="text-foreground font-medium">{sellCount}</span> venta
+              </span>
+            )}
+            {buyCount > 0 && (
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                <span className="text-foreground font-medium">{buyCount}</span> compra
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Summary bar */}
-      {!isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
-          <span>
-            <span className="text-foreground font-medium">{runningCount}</span>{' '}
-            activos de{' '}
-            <span className="text-foreground font-medium">{filteredBots.length}</span>{' '}
-            total
-          </span>
-        </div>
-      )}
-
-      {/* Table */}
+      {/* Content */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <p className="text-muted-foreground text-sm">Cargando anuncios...</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <div key={i} className="bg-card border border-border border-l-4 border-l-border rounded-xl p-4 space-y-3 animate-pulse">
+              <div className="h-3 bg-muted rounded w-2/3" />
+              <div className="h-7 bg-muted rounded w-1/2" />
+              <div className="h-3 bg-muted rounded w-full" />
+            </div>
+          ))}
         </div>
       ) : filteredBots.length === 0 ? (
-        <div className="bg-card border border-border rounded-xl flex items-center justify-center py-16">
+        <div className="bg-card border border-border rounded-xl flex items-center justify-center py-20">
           <p className="text-muted-foreground text-sm">
             {selectedAccount === 'all'
               ? 'No hay bots configurados'
@@ -280,76 +418,14 @@ export default function AdsPage() {
           </p>
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/30 border-b border-border">
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                  advNo
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                  Cuenta
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                  Bot
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                  Binance
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                  Modo
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                  Precio actual
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                  Último tick
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredBots.map(bot => (
-                <tr
-                  key={bot.id}
-                  className="border-t border-border hover:bg-muted/20 transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <AdvNoCell advNo={bot.advNo} />
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {bot.account.label}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={bot.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    {adStatuses[bot.advNo] != null ? (
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${ADV_STATUS[adStatuses[bot.advNo]]?.color ?? 'text-muted-foreground'}`}>
-                        {ADV_STATUS[adStatuses[bot.advNo]]?.label ?? `Estado ${adStatuses[bot.advNo]}`}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <ModeBadge mode={bot.mode} />
-                  </td>
-                  <td className="px-4 py-3">
-                    {bot.currentPrice != null ? (
-                      <span className="text-primary font-medium">
-                        {fmt(bot.currentPrice)} VES
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {relativeTime(bot.lastTickAt)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredBots.map(bot => (
+            <AdCard
+              key={bot.id}
+              bot={bot}
+              adStatus={adStatuses[bot.advNo]}
+            />
+          ))}
         </div>
       )}
     </div>
