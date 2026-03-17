@@ -28,12 +28,12 @@ interface Account {
 }
 
 interface NotificationConfig {
-  telegramToken: string | null;
   telegramChatId: string | null;
   notifyNewOrder: boolean;
   notifyBuyerPaid: boolean;
   notifyCompleted: boolean;
   notifyCancelled: boolean;
+  hasTelegramToken?: boolean;
 }
 
 interface FormState {
@@ -90,6 +90,7 @@ export default function NotificationsPage() {
 
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(defaultForm);
+  const [hasExistingToken, setHasExistingToken] = useState(false);
 
   // Fetch accounts list
   const { data: accounts = [], isLoading: loadingAccounts } = useQuery<Account[]>({
@@ -127,15 +128,17 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (config) {
       setForm({
-        telegramToken: config.telegramToken ?? '',
+        telegramToken: '',
         telegramChatId: config.telegramChatId ?? '',
         notifyNewOrder: config.notifyNewOrder,
         notifyBuyerPaid: config.notifyBuyerPaid,
         notifyCompleted: config.notifyCompleted,
         notifyCancelled: config.notifyCancelled,
       });
+      setHasExistingToken(config.hasTelegramToken ?? false);
     } else if (!loadingConfig) {
       setForm(defaultForm);
+      setHasExistingToken(false);
     }
   }, [config, loadingConfig]);
 
@@ -143,13 +146,15 @@ export default function NotificationsPage() {
   const handleAccountChange = (value: string) => {
     setSelectedAccountId(value);
     setForm(defaultForm);
+    setHasExistingToken(false);
   };
 
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async (data: FormState) => {
       await api.post(`/notifications/accounts/${selectedAccountId}/config`, {
-        telegramToken: data.telegramToken || null,
+        // Send token only if user typed a new one; empty = keep existing (undefined skipped by backend)
+        ...(data.telegramToken ? { telegramToken: data.telegramToken } : {}),
         telegramChatId: data.telegramChatId || null,
         notifyNewOrder: data.notifyNewOrder,
         notifyBuyerPaid: data.notifyBuyerPaid,
@@ -279,13 +284,24 @@ export default function NotificationsPage() {
             <>
               {/* Telegram Token */}
               <div className="space-y-1.5">
-                <Label htmlFor="telegram-token" className="text-sm font-medium">
-                  Telegram Token
-                </Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="telegram-token" className="text-sm font-medium">
+                    Telegram Token
+                  </Label>
+                  {hasExistingToken && !form.telegramToken && (
+                    <span className="flex items-center gap-1 text-xs text-green-500 font-medium">
+                      <span className="text-green-500">●</span> Token activo
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="telegram-token"
                   type="text"
-                  placeholder="bot123456:ABC-DEF..."
+                  placeholder={
+                    hasExistingToken
+                      ? 'Token guardado — deja vacío para mantener'
+                      : 'bot123456:ABC-DEF...'
+                  }
                   value={form.telegramToken}
                   onChange={(e) =>
                     setForm((prev) => ({ ...prev, telegramToken: e.target.value }))
