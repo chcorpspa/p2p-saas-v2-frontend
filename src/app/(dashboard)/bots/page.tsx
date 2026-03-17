@@ -82,7 +82,7 @@ function elapsed(dateStr?: string) {
 // ─── Bot Card ─────────────────────────────────────────────────────────────────
 
 function BotCard({
-  bot, onStop, onStart, onClone, onDelete, loading,
+  bot, onStop, onStart, onClone, onDelete, loading, onQuickSave,
 }: {
   bot: Bot;
   onStop: (id: string) => void;
@@ -90,9 +90,19 @@ function BotCard({
   onClone: (id: string) => void;
   onDelete: (id: string) => void;
   loading: string | null;
+  onQuickSave: (id: string, config: Record<string, any>) => void;
 }) {
   const router = useRouter();
-  const tradeType = bot.tradeType || (bot as any).config?.tradeType || 'SELL';
+  const [expanded, setExpanded] = useState(false);
+  const cfg = (bot as any).config || {};
+  const [qFloor, setQFloor] = useState(String(cfg.price_floor ?? cfg.minPrice ?? ''));
+  const [qCeil, setQCeil] = useState(String(cfg.price_ceil ?? cfg.maxPrice ?? ''));
+  const [qInc, setQInc] = useState(String(cfg.increment ?? cfg.spreadVes ?? '0.005'));
+  const [qRivalMin, setQRivalMin] = useState(String(cfg.rival_min_max ?? '0'));
+  const [qSurplusMin, setQSurplusMin] = useState(String(cfg.surplus_min ?? '0'));
+  const [qSaving, setQSaving] = useState(false);
+
+  const tradeType = bot.tradeType || cfg.tradeType || 'SELL';
   const isBuy = tradeType === 'BUY';
   const running = bot.status === 'RUNNING';
   const hasError = !!bot.lastError;
@@ -215,11 +225,81 @@ function BotCard({
         </button>
       </div>
 
-      {/* Subinfo */}
-      <div className="px-4 py-1.5 text-[10px] text-muted-foreground border-t border-white/5 flex justify-between">
+      {/* Subinfo + expand toggle */}
+      <div className="px-4 py-1.5 text-[10px] text-muted-foreground border-t border-white/5 flex justify-between items-center">
         <span>{bot.account.label}</span>
-        <span>Tick: {elapsed(bot.lastTickAt)}</span>
+        <div className="flex items-center gap-2">
+          <span>Tick: {elapsed(bot.lastTickAt)}</span>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-primary hover:text-primary/80 text-[10px] font-semibold"
+          >
+            {expanded ? '▲ Cerrar' : '▼ Edición rápida'}
+          </button>
+        </div>
       </div>
+
+      {/* Quick edit panel */}
+      {expanded && (
+        <div className="px-4 py-3 border-t border-white/15 space-y-3" style={{ background: '#0a0a14' }}>
+          <p className="text-[10px] font-semibold text-white/70 uppercase tracking-wider">Edición rápida</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-[10px] text-white/50 block mb-1">🔻 Piso</label>
+              <input type="number" step="0.001" value={qFloor} onChange={e => setQFloor(e.target.value)}
+                className="w-full rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-primary/60"
+                style={{ background: '#151520', border: '1px solid rgba(255,255,255,0.12)' }} />
+            </div>
+            <div>
+              <label className="text-[10px] text-white/50 block mb-1">🔺 Techo</label>
+              <input type="number" step="0.001" value={qCeil} onChange={e => setQCeil(e.target.value)}
+                className="w-full rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-primary/60"
+                style={{ background: '#151520', border: '1px solid rgba(255,255,255,0.12)' }} />
+            </div>
+            <div>
+              <label className="text-[10px] text-white/50 block mb-1">⚡ Incremento</label>
+              <input type="number" step="0.001" value={qInc} onChange={e => setQInc(e.target.value)}
+                className="w-full rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-primary/60"
+                style={{ background: '#151520', border: '1px solid rgba(255,255,255,0.12)' }} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-white/50 block mb-1">🎯 Ignorar rivales con mín mayor a (fiat)</label>
+              <input type="number" step="1" value={qRivalMin} onChange={e => setQRivalMin(e.target.value)} placeholder="0 = sin filtro"
+                className="w-full rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-primary/60"
+                style={{ background: '#151520', border: '1px solid rgba(255,255,255,0.12)' }} />
+              <p className="text-[8px] text-white/30 mt-0.5">Solo compite con rivales que acepten montos pequeños</p>
+            </div>
+            <div>
+              <label className="text-[10px] text-white/50 block mb-1">📦 USDT mínimo en stock del rival</label>
+              <input type="number" step="0.01" value={qSurplusMin} onChange={e => setQSurplusMin(e.target.value)} placeholder="0 = sin filtro"
+                className="w-full rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-primary/60"
+                style={{ background: '#151520', border: '1px solid rgba(255,255,255,0.12)' }} />
+              <p className="text-[8px] text-white/30 mt-0.5">Ignora rivales con menos USDT disponible</p>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              setQSaving(true);
+              const updates: Record<string, any> = {};
+              if (qFloor) updates.price_floor = parseFloat(qFloor);
+              if (qCeil) updates.price_ceil = parseFloat(qCeil);
+              if (qInc) updates.increment = parseFloat(qInc);
+              updates.price_limit_enabled = !!(qFloor || qCeil);
+              updates.rival_min_max = parseFloat(qRivalMin) || 0;
+              updates.surplus_min = parseFloat(qSurplusMin) || 0;
+              onQuickSave(bot.id, updates);
+              setQSaving(false);
+            }}
+            disabled={qSaving}
+            className="w-full py-2 text-xs rounded-lg font-semibold transition-colors disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, rgba(104,87,255,0.8), rgba(80,60,220,0.8))', color: 'white' }}
+          >
+            {qSaving ? 'Guardando...' : '✓ Guardar cambios rápidos'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -623,6 +703,15 @@ export default function BotsPage() {
             onClone={id => doAction('clone', id)}
             onDelete={id => doAction('delete', id)}
             loading={actionLoading}
+            onQuickSave={async (id, updates) => {
+              try {
+                const current = (bot as any).config || {};
+                const newConfig = { ...current, ...updates };
+                await api.put(`/bots/${id}`, { mode: bot.mode, riskProfile: (bot as any).riskProfile, config: newConfig });
+                toast.success('Config actualizada');
+                qc.invalidateQueries({ queryKey: ['bots'] });
+              } catch { toast.error('Error al guardar'); }
+            }}
           />
         ))}
       </div>
