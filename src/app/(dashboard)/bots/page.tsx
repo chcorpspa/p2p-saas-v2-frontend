@@ -358,18 +358,18 @@ export default function BotsPage() {
 
     const onTick = (data: {
       botId: string;
-      price: number;
-      activeOrdersCount: number;
-      lastTickAt: string;
+      currentPrice: number | null;
+      activeOrderCount: number;
+      marketPosition?: number;
+      priceChanged?: boolean;
     }) => {
       qc.setQueryData<Bot[]>(['bots'], (prev = []) =>
         prev.map(b =>
           b.id === data.botId
             ? {
                 ...b,
-                currentPrice: data.price,
-                activeOrdersCount: data.activeOrdersCount,
-                lastTickAt: data.lastTickAt,
+                currentPrice: data.currentPrice ?? b.currentPrice,
+                lastTickAt: new Date().toISOString(),
               }
             : b
         )
