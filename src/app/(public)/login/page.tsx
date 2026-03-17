@@ -24,9 +24,10 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/login', { email, password });
-      setAuth(data.access_token, data.tenant);
+      setAuth(data.access_token, data.tenant, data.refresh_token);
       localStorage.setItem('token', data.access_token);
       document.cookie = `token=${data.access_token}; path=/; max-age=${7 * 24 * 3600}`;
+      document.cookie = `refresh_token=${data.refresh_token}; path=/; max-age=${30 * 24 * 3600}`;
       router.push('/');
     } catch (err: any) {
       setError(err.response?.data?.message ?? 'Credenciales incorrectas. Intenta de nuevo.');
