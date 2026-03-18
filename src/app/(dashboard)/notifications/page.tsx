@@ -488,34 +488,6 @@ export default function NotificationsPage() {
                 </div>
               </div>
 
-              {/* Telegram commands */}
-              <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Comandos Telegram</h3>
-                  <Switch
-                    id="tg-cmds"
-                    checked={(form as any).telegramCommandsEnabled ?? false}
-                    onCheckedChange={(checked: boolean) => setForm((prev) => ({ ...prev, telegramCommandsEnabled: checked }))}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Controla tus bots desde Telegram: /status, /orders, /market, /pnl, /pause, /resume
-                </p>
-                <div className="space-y-1.5">
-                  <Label htmlFor="tg-pin" className="text-xs text-muted-foreground">PIN de seguridad (para /pause y /resume)</Label>
-                  <input
-                    id="tg-pin"
-                    type="password"
-                    value={(form as any).telegramPin ?? ''}
-                    onChange={(e) => setForm((prev) => ({ ...prev, telegramPin: e.target.value }))}
-                    placeholder="PIN numérico o alfanumérico"
-                    maxLength={20}
-                    className="w-full max-w-[200px] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:border-primary/50"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Protege comandos sensibles. Vacío = sin PIN</p>
-                </div>
-              </div>
-
               {/* Actions */}
               <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
                 <Button
