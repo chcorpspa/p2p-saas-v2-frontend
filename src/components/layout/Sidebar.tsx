@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
-  Bot, BarChart2, MessageSquare, List, Users, UserX,
+  Bot, BarChart2, MessageSquare, List, Users, UserX, Calendar,
   ShieldCheck, Bell, LogOut, TrendingUp, Key, BellRing, Megaphone, Settings, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
@@ -18,6 +18,7 @@ const mainLinks = [
   { href: '/ads',           label: 'Anuncios',       icon: Megaphone },
   { href: '/chat',          label: 'Chat',           icon: MessageSquare },
   { href: '/pnl',           label: 'P&L',            icon: TrendingUp },
+  { href: '/monthly',       label: 'Panel Mensual',  icon: Calendar },
 ];
 
 const settingsLinks = [
