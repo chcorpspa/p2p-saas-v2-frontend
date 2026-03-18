@@ -163,8 +163,13 @@ export default function OrdersPage() {
   const [advSide, setAdvSide] = useState('');
   const [advSort, setAdvSort] = useState('newest');
 
+  const [operators, setOperators] = useState<any[]>([]);
+  const [viewOperator, setViewOperator] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load operators
+  useEffect(() => { api.get('/operators').then(r => setOperators(r.data || [])).catch(() => {}); }, []);
 
   // Queries
   const { data: accounts = [] } = useQuery<Account[]>({ queryKey: ['accounts'], queryFn: () => api.get('/accounts').then(r => r.data) });
@@ -199,16 +204,26 @@ export default function OrdersPage() {
         paymentMethod: o.payMethod,
       }))];
 
+  // Operator advNos for filtering
+  const opAdvNos: string[] = viewOperator ? (operators.find((op: any) => op.id === viewOperator)?.advNos || []) : [];
+
   // Apply filters
   const filtered = allOrders.filter(o => {
+    // Operator filter — only applies to active orders (they have advNo)
+    // History orders don't have advNo yet, so show all for now
+    if (viewOperator && opAdvNos.length > 0) {
+      const advNo = (o as any).advNo;
+      if (advNo && !opAdvNos.includes(advNo)) return false;
+      // If no advNo (history), let it through — will be filtered when advNo is stored
+    }
     if (searchQ) {
       const q = searchQ.toLowerCase();
-      if (!o.orderNo.toLowerCase().includes(q) && !o.counterPartNickName.toLowerCase().includes(q)) return false;
+      if (!(o.orderNo || '').toLowerCase().includes(q) && !(o.counterPartNickName || '').toLowerCase().includes(q)) return false;
     }
     if (advStatus && String(o.orderStatus) !== advStatus) return false;
     if (advSide && o.tradeType !== advSide) return false;
     return true;
-  }).sort((a, b) => advSort === 'oldest' ? a.createTime - b.createTime : b.createTime - a.createTime);
+  }).sort((a, b) => advSort === 'oldest' ? (a.createTime || 0) - (b.createTime || 0) : (b.createTime || 0) - (a.createTime || 0));
 
   // Chat + detail
   useEffect(() => {
@@ -267,11 +282,14 @@ export default function OrdersPage() {
     <div className="flex flex-col h-full">
       {/* ═══ TOOLBAR (like old system) ═══ */}
       <div className="flex items-center gap-2.5 px-4 py-2 border-b border-border flex-wrap" style={{ background: 'rgba(255,255,255,0.01)' }}>
-        <select value={accountId} onChange={e => { setAccountId(e.target.value); localStorage.setItem('selectedAccountId', e.target.value); setSelected(null); }}
-          className="min-w-[160px] text-sm bg-secondary border border-border rounded px-2.5 py-1.5 text-foreground">
-          <option value="">Selecciona cuenta...</option>
-          {accounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-        </select>
+        {operators.length > 0 && (
+          <select value={viewOperator} onChange={e => setViewOperator(e.target.value)}
+            className="min-w-[160px] text-sm bg-secondary border border-border rounded px-2.5 py-1.5 text-foreground"
+            style={viewOperator ? { borderColor: '#a78bfa', color: '#a78bfa' } : undefined}>
+            <option value="">Administrador</option>
+            {operators.map((op: any) => <option key={op.id} value={op.id}>{op.name} ({(op.advNos || []).length})</option>)}
+          </select>
+        )}
 
         {/* Icon buttons */}
         <button onClick={() => setShowSearch(!showSearch)} title="Buscar" className="p-1.5 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-white/5"><Search size={14} /></button>
