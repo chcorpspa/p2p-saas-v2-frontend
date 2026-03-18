@@ -32,6 +32,7 @@ const settingsLinks = [
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
+  overlay?: boolean; // Always show as overlay (for orders page full-width)
 }
 
 // ─── Nav item ──────────────────────────────────────────────────────────────
@@ -87,7 +88,7 @@ function NavItem({
 
 // ─── Sidebar ───────────────────────────────────────────────────────────────
 
-export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
+export function Sidebar({ isOpen = true, onClose, overlay = false }: SidebarProps) {
   const pathname    = usePathname();
   const router      = useRouter();
   const tenant      = useAuthStore((s) => s.tenant);
@@ -112,7 +113,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       {onClose && (
         <div
           className={cn(
-            'fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden transition-opacity duration-200',
+            `fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity duration-200 ${overlay ? '' : 'md:hidden'}`,
             isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
           )}
           onClick={onClose}
@@ -122,12 +123,12 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       {/* Sidebar panel */}
       <aside
         className={cn(
-          'fixed md:static inset-y-0 left-0 z-50',
+          overlay ? 'fixed inset-y-0 left-0 z-50' : 'fixed md:static inset-y-0 left-0 z-50',
           'w-[220px] shrink-0 flex flex-col h-full',
           'border-r border-sidebar-border',
           'transition-transform duration-200',
           'backdrop-blur-xl',
-          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          isOpen ? 'translate-x-0' : (overlay ? '-translate-x-full' : '-translate-x-full md:translate-x-0'),
         )}
         style={{ background: 'oklch(0.08 0.018 280 / 85%)' }}
       >
