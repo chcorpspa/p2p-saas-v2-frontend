@@ -1,495 +1,404 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { TrendingUp, DollarSign, Clock, X, Calendar, BarChart3 } from 'lucide-react';
-import { useSocket } from '@/lib/socket';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { TrendingUp, DollarSign, Clock, ChevronDown, Download } from 'lucide-react';
 import api from '@/lib/api';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface PnlSummary {
-  closedCycles: number;
-  totalNetUsdt: string;
+interface PnlSummary { closedCycles: number; totalNetUsdt: string; }
+
+interface CycleOrder {
+  orderNo: string;
+  trade_type: 'BUY' | 'SELL';
+  asset: string;
+  fiat: string;
+  amount: number;
+  unit_price: number;
+  total_price: number;
+  portion_usdt: number;
+  portion_fiat: number;
+  portion_pct: number;
+  counterparty: string;
 }
 
-interface TradingCycle {
+interface EnrichedCycle {
   id: string;
-  accountId: string;
-  status: 'OPEN' | 'CLOSED' | 'MANUAL_CLOSED';
-  sellUsdt: string;
-  buyUsdtTotal: string;
-  netUsdt: string | null;
-  sellFeeUsdt?: string;
-  buyFeeUsdt?: string;
-  pmFeeUsdt?: string;
+  status: string;
   createdAt: string;
   closedAt: string | null;
+  sell_amount: number;
+  sell_total_fiat: number;
+  sell_unit_price: number;
+  buy_amount: number;
+  buy_total_fiat: number;
+  buy_avg_price: number;
+  pending_ves: number;
+  spread_profit_ves: number;
+  gross_usdt: number;
+  net_usdt_recovered: number;
+  real_net_profit_usdt: number;
+  sell_binance_fee_usdt: number;
+  buy_binance_fee_usdt: number;
+  buy_pm_fee_usdt: number;
+  total_fees: number;
+  orders: CycleOrder[];
+  fiat: string;
+  opened_at: string;
+  netUsdt: string | null;
 }
 
-interface MonthlyReport {
-  count: number;
-  totalNetUsdt: string;
-  byMonth?: Array<{ month: string; count: number; totalNetUsdt: string }>;
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmtUsdt(n: number) { return n.toFixed(2); }
+function fmtUsdtAmt(n: number) { return n.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtFiat(n: number, fiat = 'VES') {
+  const fmt = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (['VES','COP','CLP','ARS'].includes(fiat)) return fmt.replace(/,/g, 'X').replace(/\./g, ',').replace(/X/g, '.');
+  return fmt;
 }
 
-interface Account {
-  id: string;
-  label: string;
-}
+// ─── Expandable Cycle Card (ported from old system index.html:6083-6253) ────
 
-// ─── Formatters ───────────────────────────────────────────────────────────────
+function CycleCard({ c, onClose }: { c: EnrichedCycle; onClose: (id: string, adj?: number) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [adjVes, setAdjVes] = useState('');
 
-function fmt2(val: string | number | null | undefined): string {
-  if (val == null) return '—';
-  return Number(val).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+  const isOpen = c.status === 'OPEN';
+  const netUsdt = c.real_net_profit_usdt;
+  const isPositive = netUsdt >= 0;
+  const date = c.opened_at ? new Date(c.opened_at).toLocaleDateString('es-VE') : '—';
+  const sellPrice = fmtFiat(c.sell_unit_price, c.fiat);
+  const buyTotal = fmtFiat(c.buy_total_fiat, c.fiat);
+  const pendingVes = fmtFiat(c.pending_ves, c.fiat);
+  const avgBuyPrice = c.buy_avg_price > 0 ? fmtFiat(c.buy_avg_price, c.fiat) : '—';
+  const spreadVal = c.buy_avg_price > 0 ? fmtFiat(c.sell_unit_price - c.buy_avg_price, c.fiat) : '—';
+  const grossVes = fmtFiat(c.spread_profit_ves, c.fiat);
 
-function fmt4(val: string | number | null | undefined): string {
-  if (val == null) return '—';
-  return Number(val).toLocaleString('es-VE', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-}
+  // Progress bar for open cycles
+  const confirmedPct = c.sell_total_fiat > 0 ? Math.min(100, (c.buy_total_fiat / c.sell_total_fiat) * 100) : 0;
 
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
-}
-
-function SkeletonRow() {
   return (
-    <tr className="border-t border-border animate-pulse">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <td key={i} className="px-4 py-3">
-          <div className="h-4 bg-muted rounded w-full" />
-        </td>
-      ))}
-    </tr>
-  );
-}
+    <div className="rounded-xl border border-border overflow-hidden mb-3" style={{ background: 'rgba(255,255,255,0.02)' }}>
+      {/* Header — clickable */}
+      <div onClick={() => setExpanded(!expanded)} className="cursor-pointer px-4 py-3 flex items-center justify-between hover:bg-white/3 transition-colors">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isOpen ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-green-500/20 text-green-400 border border-green-500/30'}`}>
+            {isOpen ? '🔄 Abierto' : '✅ Cerrado'}
+          </span>
+          <span className="text-xs text-muted-foreground">{date}</span>
+          <div className="flex flex-col gap-0.5 ml-1">
+            <span className="text-foreground font-bold text-sm">
+              {fmtUsdtAmt(c.sell_amount)} USDT
+              <span className="text-green-400 font-semibold text-xs ml-1.5">= +{fmtFiat(c.sell_total_fiat, c.fiat)} {c.fiat}</span>
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              Tasa de venta: <span className="text-primary font-bold">{sellPrice} {c.fiat}</span>
+            </span>
+          </div>
+        </div>
+        <div className="text-right flex items-center gap-2">
+          {isOpen ? (
+            <div>
+              <div className="text-red-400 font-bold text-sm">-{pendingVes} <span className="text-[10px]">{c.fiat}</span></div>
+              <div className="text-[10px] text-muted-foreground">falta recomprar</div>
+            </div>
+          ) : (
+            <div>
+              <div className={`font-bold text-sm ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                {isPositive ? '+' : ''}{fmtUsdt(netUsdt)} USDT
+              </div>
+              <div className="text-[10px] text-muted-foreground">neto</div>
+            </div>
+          )}
+          <ChevronDown size={14} className={`text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        </div>
+      </div>
 
-function SummaryCard({ title, value, icon, valueClassName, loading }: {
-  title: string; value: string | number; icon: React.ReactNode;
-  valueClassName?: string; loading?: boolean;
-}) {
-  return (
-    <div className="glass-card rounded-xl p-5 flex items-center gap-4">
-      <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary shrink-0">
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="text-sm text-muted-foreground truncate">{title}</p>
-        {loading ? (
-          <div className="h-6 w-24 bg-muted rounded animate-pulse mt-1" />
-        ) : (
-          <p className={`text-xl font-bold truncate ${valueClassName ?? ''}`}>{value}</p>
-        )}
-      </div>
+      {/* Body — expandable */}
+      {expanded && (
+        <div className="border-t border-border px-4 py-3">
+          {/* Progress bar for open */}
+          {isOpen && (
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#1a1f35' }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${confirmedPct.toFixed(1)}%`, background: confirmedPct >= 100 ? '#4ade80' : '#f0b90b' }} />
+              </div>
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap">{confirmedPct.toFixed(1)}% confirmado</span>
+            </div>
+          )}
+
+          {/* Orders */}
+          {c.orders.map((o, i) => {
+            const isParcial = o.portion_pct < 0.999;
+            const dispUsdt = isParcial ? o.portion_usdt : o.amount;
+            const dispFiat = isParcial ? o.portion_fiat : o.total_price;
+            return (
+              <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/30 text-xs">
+                <span className="text-muted-foreground">{o.trade_type === 'SELL' ? '📤 Venta' : '📥 Recompra'}</span>
+                <span className="text-foreground font-mono">
+                  {fmtUsdtAmt(dispUsdt)} {o.asset} × {fmtFiat(o.unit_price, c.fiat)}
+                  {isParcial && <span className="text-purple-400 text-[10px] ml-1">(parcial: {fmtFiat(dispFiat, c.fiat)} de {fmtFiat(o.total_price, c.fiat)} {c.fiat})</span>}
+                </span>
+                <span className="text-foreground">{fmtFiat(dispFiat, c.fiat)} {c.fiat}</span>
+              </div>
+            );
+          })}
+
+          {/* Totals */}
+          <div className="mt-2 space-y-1">
+            <div className="flex justify-between text-xs py-1 border-b border-border/30">
+              <span className="text-muted-foreground">Total recomprado</span>
+              <span className="text-foreground font-mono">{fmtUsdtAmt(c.buy_amount)} USDT</span>
+              <span className="text-red-400">-{buyTotal} {c.fiat}</span>
+            </div>
+            <div className="flex justify-between text-xs py-1 border-b border-border/30">
+              <span className="text-muted-foreground">Precio promedio recompra</span>
+              <span></span>
+              <span className="text-muted-foreground">{avgBuyPrice} {c.fiat} <span className="text-green-400 text-[10px]">(spread: +{spreadVal})</span></span>
+            </div>
+
+            {/* Middle row: pending or gross */}
+            {isOpen ? (
+              <div className="flex justify-between text-xs py-1 border-b border-border/30">
+                <span className="text-muted-foreground">Falta por recomprar</span>
+                <span className="text-red-400 text-[10px]">≈ -{c.buy_avg_price > 0 ? fmtUsdt(c.pending_ves / c.buy_avg_price) : '—'} USDT</span>
+                <span className="text-red-400">-{pendingVes} {c.fiat}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between text-xs py-1 border-b border-border/30">
+                <span className="text-muted-foreground">Ganancia bruta</span>
+                <span className="text-green-400 text-[10px]">+{fmtUsdt(c.gross_usdt)} USDT <span className="text-muted-foreground">(recuperados: +{fmtUsdtAmt(c.net_usdt_recovered)})</span></span>
+                <span className="text-green-400">+{grossVes} {c.fiat}</span>
+              </div>
+            )}
+
+            {/* Fees */}
+            <div className="flex justify-between text-xs py-1 border-b border-border/30">
+              <span className="text-muted-foreground">Fee Binance venta</span>
+              <span className="text-muted-foreground/60 text-[10px]">sobre {fmtFiat(c.sell_total_fiat, c.fiat)} {c.fiat}</span>
+              <span className="text-red-400">-{fmtUsdt(c.sell_binance_fee_usdt)} USDT</span>
+            </div>
+            <div className="flex justify-between text-xs py-1 border-b border-border/30">
+              <span className="text-muted-foreground">Fee Binance recompra</span>
+              <span className="text-muted-foreground/60 text-[10px]">sobre {fmtFiat(c.buy_total_fiat, c.fiat)} {c.fiat}</span>
+              <span className="text-red-400">-{fmtUsdt(c.buy_binance_fee_usdt)} USDT</span>
+            </div>
+            <div className="flex justify-between text-xs py-1 border-b border-border/30">
+              <span className="text-muted-foreground">Fee Pago Móvil</span>
+              <span className="text-muted-foreground/60 text-[10px]">sobre {fmtFiat(c.buy_total_fiat, c.fiat)} {c.fiat}</span>
+              <span className="text-red-400">-{fmtUsdt(c.buy_pm_fee_usdt)} USDT</span>
+            </div>
+
+            {/* NET PROFIT */}
+            <div className="flex justify-between text-sm py-2 font-bold mt-1" style={{ borderTop: '2px solid rgba(255,255,255,0.1)' }}>
+              <span className="text-foreground">{isOpen ? 'GANANCIA ESTIMADA' : 'GANANCIA NETA'}</span>
+              <span></span>
+              <span className={isPositive ? 'text-green-400' : 'text-red-400'}>
+                {isPositive ? '+' : ''}{fmtUsdt(netUsdt)} USDT
+              </span>
+            </div>
+          </div>
+
+          {/* Close button for open cycles */}
+          {isOpen && (
+            <div className="mt-3 pt-3 border-t border-border">
+              {!showCloseModal ? (
+                <Button size="sm" variant="outline" onClick={() => setShowCloseModal(true)} className="text-xs">
+                  Cerrar ciclo manualmente
+                </Button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Ajuste VES recuperados fuera de Binance (opcional):</p>
+                  <div className="flex gap-2">
+                    <input type="number" value={adjVes} onChange={e => setAdjVes(e.target.value)} placeholder="0"
+                      className="flex-1 bg-secondary border border-border rounded px-2 py-1 text-sm font-mono" />
+                    <Button size="sm" onClick={() => { setAdjVes(String(c.pending_ves)); }} variant="outline" className="text-xs">Todo</Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => { onClose(c.id, parseFloat(adjVes) || 0); setShowCloseModal(false); }}
+                      className="bg-primary text-primary-foreground text-xs">Cerrar</Button>
+                    <Button size="sm" variant="outline" onClick={() => setShowCloseModal(false)} className="text-xs">Cancelar</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Main Page ───────────────────────────────────────────────────────────────
 
-export default function PnLPage() {
+export default function PnlPage() {
   const qc = useQueryClient();
-  const socket = useSocket();
-
-  const [selectedAccount, setSelectedAccount] = useState<string>('');
+  const [tab, setTab] = useState<'cycles' | 'monthly' | 'yearly'>('cycles');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL');
-  const [viewTab, setViewTab] = useState<'cycles' | 'monthly' | 'yearly'>('cycles');
-  const [closeModal, setCloseModal] = useState<{ cycleId: string } | null>(null);
-  const [adjustmentVes, setAdjustmentVes] = useState('');
-  const [reportMonth, setReportMonth] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const [reportYear, setReportYear] = useState(() => String(new Date().getFullYear()));
+  const [month, setMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; });
+  const [year, setYear] = useState(() => String(new Date().getFullYear()));
 
-  // ── Queries ──
-  const { data: summary, isLoading: summaryLoading } = useQuery<PnlSummary>({
-    queryKey: ['pnl', 'summary'],
+  const { data: summary } = useQuery<PnlSummary>({
+    queryKey: ['pnl-summary'],
     queryFn: () => api.get('/pnl/summary').then(r => r.data),
   });
 
-  const { data: cycles = [], isLoading: cyclesLoading } = useQuery<TradingCycle[]>({
-    queryKey: ['pnl', 'cycles', selectedAccount],
-    queryFn: () => {
-      const params = selectedAccount ? `?accountId=${selectedAccount}` : '';
-      return api.get(`/pnl/cycles${params}`).then(r => r.data);
-    },
-    enabled: viewTab === 'cycles',
+  const { data: cycles = [], isLoading } = useQuery<EnrichedCycle[]>({
+    queryKey: ['pnl-cycles'],
+    queryFn: () => api.get('/pnl/cycles').then(r => r.data),
   });
 
-  const { data: accounts = [] } = useQuery<Account[]>({
-    queryKey: ['accounts'],
-    queryFn: () => api.get('/accounts').then(r => r.data),
+  const { data: monthlyData } = useQuery({
+    queryKey: ['pnl-monthly', month],
+    queryFn: () => api.get('/pnl/monthly', { params: { month } }).then(r => r.data),
+    enabled: tab === 'monthly',
   });
 
-  const { data: monthlyData, isLoading: monthlyLoading } = useQuery<MonthlyReport>({
-    queryKey: ['pnl', 'monthly', reportMonth, selectedAccount],
-    queryFn: () => {
-      const params = new URLSearchParams({ month: reportMonth });
-      if (selectedAccount) params.set('accountId', selectedAccount);
-      return api.get(`/pnl/monthly?${params}`).then(r => r.data);
-    },
-    enabled: viewTab === 'monthly',
+  const { data: yearlyData } = useQuery({
+    queryKey: ['pnl-yearly', year],
+    queryFn: () => api.get('/pnl/yearly', { params: { year } }).then(r => r.data),
+    enabled: tab === 'yearly',
   });
 
-  const { data: yearlyData, isLoading: yearlyLoading } = useQuery<MonthlyReport>({
-    queryKey: ['pnl', 'yearly', reportYear, selectedAccount],
-    queryFn: () => {
-      const params = new URLSearchParams({ year: reportYear });
-      if (selectedAccount) params.set('accountId', selectedAccount);
-      return api.get(`/pnl/yearly?${params}`).then(r => r.data);
-    },
-    enabled: viewTab === 'yearly',
+  const closeCycle = async (cycleId: string, adjustmentVes?: number) => {
+    try {
+      await api.post(`/pnl/cycles/${cycleId}/close`, { adjustmentVes });
+      toast.success('Ciclo cerrado');
+      qc.invalidateQueries({ queryKey: ['pnl-cycles'] });
+      qc.invalidateQueries({ queryKey: ['pnl-summary'] });
+    } catch (e: any) { toast.error(e.response?.data?.message || 'Error'); }
+  };
+
+  const filteredCycles = cycles.filter(c => {
+    if (statusFilter === 'OPEN') return c.status === 'OPEN';
+    if (statusFilter === 'CLOSED') return c.status === 'CLOSED' || c.status === 'MANUAL_CLOSED';
+    return true;
   });
 
-  // ── Socket invalidation ──
-  useEffect(() => {
-    if (!socket) return;
-    const invalidate = () => { qc.invalidateQueries({ queryKey: ['pnl'] }); };
-    socket.on('pnl:update', invalidate);
-    socket.on('pnl:cycle_opened', invalidate);
-    return () => {
-      socket.off('pnl:update', invalidate);
-      socket.off('pnl:cycle_opened', invalidate);
-    };
-  }, [socket, qc]);
+  const openCycles = cycles.filter(c => c.status === 'OPEN').length;
+  const totalFees = cycles.reduce((s, c) => s + (c.total_fees || 0), 0);
 
-  // ── Mutations ──
-  const closeCycle = useMutation({
-    mutationFn: ({ cycleId, adjustmentVes }: { cycleId: string; adjustmentVes?: number }) =>
-      api.post(`/pnl/cycles/${cycleId}/close`, { adjustmentVes }).then(r => r.data),
-    onSuccess: () => {
-      toast.success('Ciclo cerrado manualmente');
-      qc.invalidateQueries({ queryKey: ['pnl'] });
-      setCloseModal(null);
-      setAdjustmentVes('');
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  // ── Derived ──
-  const openCyclesCount = cycles.filter(c => c.status === 'OPEN').length;
-  const filteredCycles = statusFilter === 'ALL' ? cycles : cycles.filter(c => c.status === statusFilter || (statusFilter === 'CLOSED' && c.status === 'MANUAL_CLOSED'));
-  const totalNetNum = Number(summary?.totalNetUsdt ?? 0);
-  const netColor = totalNetNum >= 0 ? 'text-green-400' : 'text-red-400';
-
-  async function exportCsv() {
-    const res = await api.get('/pnl/export/csv', { responseType: 'blob' });
-    const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pnl-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+  const exportCSV = () => {
+    const token = localStorage.getItem('token');
+    fetch('/api/pnl/export/csv', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.blob()).then(blob => { const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = 'pnl-cycles.csv'; a.click(); })
+      .catch(() => toast.error('Error'));
+  };
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Page title */}
+    <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">P&amp;L — Ciclos de Trading</h1>
-        <Button variant="outline" size="sm" onClick={exportCsv}>↓ Exportar CSV</Button>
+        <h1 className="text-xl font-bold">P&L — Ciclos de Trading</h1>
+        <button onClick={exportCSV} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 border border-border rounded px-2 py-1">
+          <Download size={12} /> Exportar CSV
+        </button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <SummaryCard
-          title="Ciclos Cerrados"
-          value={summary?.closedCycles ?? 0}
-          icon={<TrendingUp className="w-5 h-5" />}
-          loading={summaryLoading}
-        />
-        <SummaryCard
-          title="Ganancia Neta"
-          value={`${fmt2(summary?.totalNetUsdt)} USDT`}
-          icon={<DollarSign className="w-5 h-5" />}
-          valueClassName={netColor}
-          loading={summaryLoading}
-        />
-        <SummaryCard
-          title="Ciclos Abiertos"
-          value={cyclesLoading ? '—' : openCyclesCount}
-          icon={<Clock className="w-5 h-5" />}
-          loading={cyclesLoading && !cycles.length}
-        />
-      </div>
-
-      {/* View tabs + Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* View tabs */}
-        <div className="flex gap-1 rounded-lg border border-border bg-card p-1">
-          {([
-            { key: 'cycles', label: 'Ciclos', icon: <TrendingUp className="w-3.5 h-3.5" /> },
-            { key: 'monthly', label: 'Mensual', icon: <Calendar className="w-3.5 h-3.5" /> },
-            { key: 'yearly', label: 'Anual', icon: <BarChart3 className="w-3.5 h-3.5" /> },
-          ] as const).map(({ key, label, icon }) => (
-            <button
-              key={key}
-              onClick={() => setViewTab(key)}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                viewTab === key
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              {icon}
-              {label}
-            </button>
-          ))}
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-1"><TrendingUp size={16} className="text-green-400" /><span className="text-xs text-muted-foreground">Ciclos Cerrados</span></div>
+          <p className="text-xl font-bold">{summary?.closedCycles ?? 0}</p>
         </div>
-
-        {/* Account select */}
-        <select
-          value={selectedAccount}
-          onChange={e => setSelectedAccount(e.target.value)}
-          className="h-9 rounded-lg border border-border bg-card text-foreground text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
-        >
-          <option value="">Todas las cuentas</option>
-          {accounts.map(a => (
-            <option key={a.id} value={String(a.id)}>{a.label}</option>
-          ))}
-        </select>
-
-        {/* Status filter — only for cycles tab */}
-        {viewTab === 'cycles' && (
-          <div className="flex gap-1 rounded-lg border border-border bg-card p-1">
-            {(['ALL', 'OPEN', 'CLOSED'] as const).map(s => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                  statusFilter === s
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-              >
-                {s === 'ALL' ? 'Todos' : s}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Month picker */}
-        {viewTab === 'monthly' && (
-          <input
-            type="month"
-            value={reportMonth}
-            onChange={e => setReportMonth(e.target.value)}
-            className="h-9 rounded-lg border border-border bg-card text-foreground text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
-        )}
-
-        {/* Year picker */}
-        {viewTab === 'yearly' && (
-          <input
-            type="number"
-            value={reportYear}
-            onChange={e => setReportYear(e.target.value)}
-            min="2024"
-            max="2030"
-            className="h-9 w-24 rounded-lg border border-border bg-card text-foreground text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
-        )}
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-1"><Clock size={16} className="text-amber-400" /><span className="text-xs text-muted-foreground">Ciclos Abiertos</span></div>
+          <p className="text-xl font-bold text-amber-400">{openCycles}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-1"><DollarSign size={16} className="text-green-400" /><span className="text-xs text-muted-foreground">Ganancia Neta</span></div>
+          <p className="text-xl font-bold text-green-400">{summary?.totalNetUsdt ?? '0.00'} USDT</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-1"><DollarSign size={16} className="text-red-400" /><span className="text-xs text-muted-foreground">Fee Binance</span></div>
+          <p className="text-sm font-bold text-red-400">-{fmtUsdt(cycles.reduce((s,c) => s + (c.sell_binance_fee_usdt||0) + (c.buy_binance_fee_usdt||0), 0))} USDT</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-1"><DollarSign size={16} className="text-red-400" /><span className="text-xs text-muted-foreground">Fee Pago Móvil</span></div>
+          <p className="text-sm font-bold text-red-400">-{fmtUsdt(cycles.reduce((s,c) => s + (c.buy_pm_fee_usdt||0), 0))} USDT</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-1"><DollarSign size={16} className="text-red-400" /><span className="text-xs text-muted-foreground">Falta Recomprar</span></div>
+          <p className="text-sm font-bold text-red-400">-{fmtUsdt(cycles.filter(c=>c.status==='OPEN').reduce((s,c) => s + (c.pending_ves > 0 && c.buy_avg_price > 0 ? c.pending_ves/c.buy_avg_price : 0), 0))} USDT</p>
+        </div>
       </div>
 
-      {/* ── Cycles Table ─────────────────────────────────────────────── */}
-      {viewTab === 'cycles' && (
-        <div className="glass-card rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="px-4 py-3 text-left text-muted-foreground font-medium whitespace-nowrap">Apertura</th>
-                  <th className="px-4 py-3 text-left text-muted-foreground font-medium whitespace-nowrap">Cierre</th>
-                  <th className="px-4 py-3 text-right text-muted-foreground font-medium whitespace-nowrap">Venta USDT</th>
-                  <th className="px-4 py-3 text-right text-muted-foreground font-medium whitespace-nowrap">Compra USDT</th>
-                  <th className="px-4 py-3 text-right text-muted-foreground font-medium whitespace-nowrap">Fees</th>
-                  <th className="px-4 py-3 text-right text-muted-foreground font-medium whitespace-nowrap">Neto USDT</th>
-                  <th className="px-4 py-3 text-center text-muted-foreground font-medium whitespace-nowrap">Estado</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {cyclesLoading && Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)}
+      {/* Tabs + filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {(['cycles', 'monthly', 'yearly'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-3 py-1.5 text-xs rounded border font-medium ${tab === t ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground'}`}>
+            {t === 'cycles' ? '📊 Ciclos' : t === 'monthly' ? '📅 Mensual' : '📈 Anual'}
+          </button>
+        ))}
+        {tab === 'cycles' && (
+          <>
+            <div className="ml-4 flex gap-1">
+              {(['ALL', 'OPEN', 'CLOSED'] as const).map(s => (
+                <button key={s} onClick={() => setStatusFilter(s)}
+                  className={`px-2 py-1 text-[10px] rounded ${statusFilter === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {s === 'ALL' ? 'Todos' : s}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {tab === 'monthly' && <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="ml-4 bg-secondary border border-border rounded px-2 py-1 text-xs" />}
+        {tab === 'yearly' && <input type="number" value={year} onChange={e => setYear(e.target.value)} min="2024" max="2030" className="ml-4 bg-secondary border border-border rounded px-2 py-1 text-xs w-20" />}
+      </div>
 
-                {!cyclesLoading && filteredCycles.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
-                      No hay ciclos registrados.
-                    </td>
-                  </tr>
-                )}
+      {/* Content */}
+      {tab === 'cycles' && (
+        isLoading ? <p className="text-muted-foreground text-sm py-8 text-center">Cargando ciclos...</p> :
+        filteredCycles.length === 0 ? <p className="text-muted-foreground text-sm py-8 text-center">Sin ciclos</p> :
+        <div>
+          {filteredCycles.map(c => <CycleCard key={c.id} c={c} onClose={closeCycle} />)}
+        </div>
+      )}
 
-                {!cyclesLoading && filteredCycles.map(c => {
-                  const totalFees = Number(c.sellFeeUsdt ?? 0) + Number(c.buyFeeUsdt ?? 0) + Number(c.pmFeeUsdt ?? 0);
-                  const netNum = c.netUsdt != null ? Number(c.netUsdt) : null;
-                  const netColorRow = netNum == null ? '' : netNum >= 0 ? 'text-green-400' : 'text-red-400';
-
-                  return (
-                    <tr key={c.id} className="border-t border-border hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 whitespace-nowrap text-foreground">{fmtDate(c.createdAt)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{fmtDate(c.closedAt)}</td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums">{fmt2(c.sellUsdt)}</td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums">{fmt2(c.buyUsdtTotal)}</td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-muted-foreground">{fmt4(totalFees)}</td>
-                      <td className={`px-4 py-3 text-right whitespace-nowrap tabular-nums font-bold ${netColorRow}`}>
-                        {c.netUsdt != null ? fmt2(c.netUsdt) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge variant={c.status === 'OPEN' ? 'secondary' : 'default'}>
-                          {c.status === 'MANUAL_CLOSED' ? 'MANUAL' : c.status}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {c.status === 'OPEN' && (
-                          <button
-                            onClick={() => setCloseModal({ cycleId: c.id })}
-                            className="text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors whitespace-nowrap"
-                          >
-                            Cerrar
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {tab === 'monthly' && monthlyData && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-card border border-border rounded-xl p-4">
+              <p className="text-xs text-muted-foreground">Ciclos cerrados</p>
+              <p className="text-xl font-bold">{monthlyData.closedCycles}</p>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4">
+              <p className="text-xs text-muted-foreground">Ganancia neta</p>
+              <p className="text-xl font-bold text-green-400">{monthlyData.totalNetUsdt} USDT</p>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── Monthly Report ───────────────────────────────────────────── */}
-      {viewTab === 'monthly' && (
-        <div className="space-y-4">
-          {monthlyLoading ? (
-            <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="glass-card rounded-xl p-5">
-                  <p className="text-sm text-muted-foreground">Ciclos cerrados en {reportMonth}</p>
-                  <p className="text-3xl font-bold mt-1">{monthlyData?.count ?? 0}</p>
-                </div>
-                <div className="glass-card rounded-xl p-5">
-                  <p className="text-sm text-muted-foreground">Ganancia neta</p>
-                  <p className={`text-3xl font-bold mt-1 ${Number(monthlyData?.totalNetUsdt ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {fmt2(monthlyData?.totalNetUsdt)} USDT
-                  </p>
-                </div>
-              </div>
-            </>
+      {tab === 'yearly' && yearlyData && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-card border border-border rounded-xl p-4">
+              <p className="text-xs text-muted-foreground">Ciclos cerrados</p>
+              <p className="text-xl font-bold">{yearlyData.closedCycles}</p>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4">
+              <p className="text-xs text-muted-foreground">Ganancia neta</p>
+              <p className="text-xl font-bold text-green-400">{yearlyData.totalNetUsdt} USDT</p>
+            </div>
+          </div>
+          {yearlyData.byMonth && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-card"><tr><th className="text-left p-3 text-muted-foreground font-normal">Mes</th><th className="text-right p-3 text-muted-foreground font-normal">Ciclos</th><th className="text-right p-3 text-muted-foreground font-normal">Neto USDT</th></tr></thead>
+                <tbody>
+                  {Object.entries(yearlyData.byMonth).map(([m, d]: [string, any]) => (
+                    <tr key={m} className="border-t border-border"><td className="p-3">{m}</td><td className="p-3 text-right">{d.count}</td><td className="p-3 text-right text-green-400">{d.netUsdt.toFixed(2)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
-        </div>
-      )}
-
-      {/* ── Yearly Report ────────────────────────────────────────────── */}
-      {viewTab === 'yearly' && (
-        <div className="space-y-4">
-          {yearlyLoading ? (
-            <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="glass-card rounded-xl p-5">
-                  <p className="text-sm text-muted-foreground">Ciclos en {reportYear}</p>
-                  <p className="text-3xl font-bold mt-1">{yearlyData?.count ?? 0}</p>
-                </div>
-                <div className="glass-card rounded-xl p-5">
-                  <p className="text-sm text-muted-foreground">Ganancia anual</p>
-                  <p className={`text-3xl font-bold mt-1 ${Number(yearlyData?.totalNetUsdt ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {fmt2(yearlyData?.totalNetUsdt)} USDT
-                  </p>
-                </div>
-              </div>
-
-              {/* Monthly breakdown */}
-              {yearlyData?.byMonth && yearlyData.byMonth.length > 0 && (
-                <div className="glass-card rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/30">
-                        <th className="px-4 py-3 text-left text-muted-foreground font-medium">Mes</th>
-                        <th className="px-4 py-3 text-right text-muted-foreground font-medium">Ciclos</th>
-                        <th className="px-4 py-3 text-right text-muted-foreground font-medium">Neto USDT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {yearlyData.byMonth.map(m => (
-                        <tr key={m.month} className="border-t border-border hover:bg-muted/20">
-                          <td className="px-4 py-3">{m.month}</td>
-                          <td className="px-4 py-3 text-right">{m.count}</td>
-                          <td className={`px-4 py-3 text-right font-bold ${Number(m.totalNetUsdt) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {fmt2(m.totalNetUsdt)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ── Manual Close Modal ───────────────────────────────────────── */}
-      {closeModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass-card border border-white/10 rounded-2xl p-6 w-full max-w-sm space-y-5 animate-[fadeInUp_0.2s_ease]">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold">Cerrar ciclo manualmente</h2>
-              <button onClick={() => setCloseModal(null)} className="text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-sm text-muted-foreground">
-              El ciclo se cerrará con el total de compras actuales.
-              Si el comprador pagó en efectivo, añade el monto VES recibido.
-            </p>
-
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1.5">
-                Ajuste en VES <span className="text-muted-foreground/50">(opcional)</span>
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={adjustmentVes}
-                onChange={e => setAdjustmentVes(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
-                placeholder="0.00"
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <Button
-                className="flex-1 bg-red-600 hover:bg-red-500 text-white"
-                onClick={() => {
-                  closeCycle.mutate({
-                    cycleId: closeModal.cycleId,
-                    adjustmentVes: adjustmentVes ? Number(adjustmentVes) : undefined,
-                  });
-                }}
-                disabled={closeCycle.isPending}
-              >
-                {closeCycle.isPending ? 'Cerrando...' : 'Confirmar cierre'}
-              </Button>
-              <Button variant="secondary" className="flex-1" onClick={() => setCloseModal(null)}>
-                Cancelar
-              </Button>
-            </div>
-          </div>
         </div>
       )}
     </div>
