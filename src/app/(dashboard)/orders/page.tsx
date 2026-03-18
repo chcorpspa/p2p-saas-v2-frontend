@@ -6,7 +6,7 @@ import { useSocket } from '@/lib/socket';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Search, MessageSquare, Filter, RefreshCw, Copy, Check, Download } from 'lucide-react';
+import { Search, Filter, RefreshCw, Copy, Check } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -209,12 +209,11 @@ export default function OrdersPage() {
 
   // Apply filters
   const filtered = allOrders.filter(o => {
-    // Operator filter — only applies to active orders (they have advNo)
-    // History orders don't have advNo yet, so show all for now
+    // Operator filter: hide orders that don't match operator's advNos
     if (viewOperator && opAdvNos.length > 0) {
       const advNo = (o as any).advNo;
-      if (advNo && !opAdvNos.includes(advNo)) return false;
-      // If no advNo (history), let it through — will be filtered when advNo is stored
+      if (!advNo) return false; // no advNo = old order, hide for operator
+      if (!opAdvNos.includes(advNo)) return false;
     }
     if (searchQ) {
       const q = searchQ.toLowerCase();
@@ -263,12 +262,6 @@ export default function OrdersPage() {
   const sendImg = async (file: File) => {
     if (!selected || file.size > 5*1024*1024) { toast.error('Máx 5MB'); return; }
     try { const f = new FormData(); f.append('file', file); f.append('accountId', accountId); await api.post(`/chat/${selected.orderNo}/send-image`, f, { headers: { 'Content-Type': 'multipart/form-data' } }); toast.success('Imagen enviada'); } catch { toast.error('Error'); }
-  };
-  const exportCSV = () => {
-    const token = localStorage.getItem('token');
-    fetch('/api/orders/export/csv', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.blob()).then(blob => { const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = 'orders.csv'; a.click(); })
-      .catch(() => toast.error('Error'));
   };
 
   const o = selected;
@@ -338,7 +331,6 @@ export default function OrdersPage() {
             </select>
           </div>
           <button onClick={() => { setAdvStatus(''); setAdvSide(''); setAdvSort('newest'); }} className="text-[11px] text-muted-foreground hover:text-foreground">Limpiar</button>
-          <button onClick={exportCSV} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"><Download size={11} /> CSV</button>
         </div>
       )}
 
